@@ -1,0 +1,772 @@
+# 0. Workaround for choose.file dialog issue ----
+# ═══════════════════════════════════════════════
+
+# Select files to import ----
+# This has to be the first statement in the script as there is a bug with utils::choose.files
+
+# Select ini file
+ini_file <- utils::choose.files(caption = 'Please select the INI FILE', multi = FALSE)
+
+# Select caseload tracker
+caseload_tracker_file <- utils::choose.files(caption = 'Please select the CASELOAD TRACKERS to import', multi = FALSE)
+
+# Select reporting Workbooks
+reporting_workbook_filelist <- utils::choose.files(caption = 'Please select the REPORTING WORKBOOKS to import', multi = TRUE)
+
+# Get the start of the reporting year
+year_start <- svDialogs::dlgInput(message = 'Enter Reporting Year Start in YYYY-MM-DD format (e.g. 2024-01-01)', default = '2024-01-01')$res
+dt_year_start <- as.Date(year_start, '%Y-%m-%d')
+
+# Get the current month
+current_month <- format(Sys.Date() - months(1), '%Y-%m-01')
+current_month <- svDialogs::dlgInput(message = paste0('Enter Current Month in YYYY-MM-DD format (e.g. ', current_month, ')'), default = current_month)$res
+dt_current_month <- as.Date(current_month, '%Y-%m-%d')
+
+# 1. Load libraries and define functions ----
+# ═══════════════════════════════════════════
+
+# * 1.1. Load libraries ----
+# ──────────────────────────
+library(tidyverse)
+library(readxl)
+library(ini)
+library(flextable)
+library(officer)
+library(officedown)
+library(svDialogs)
+library(conflicted)
+
+# * 1.2. Define functions ----
+# ────────────────────────────
+
+# * * 1.2.1. Import Functions ----
+
+# * * * 1.2.1.1. Import Functions: Caseload Tracker ----
+fnImportCaseloadTracker <- function(path, sheets){
+  # Initialise the data frame to receive the caseload tracker data
+  df <- data.frame()
+  
+  # Get the required field numbers from the ini file
+  caseload_tracker_field_numbers <- c(
+    unlist(as.integer(unname(ini_file_settings$caseload_tracker_demographics))),
+    unlist(as.integer(unname(ini_file_settings$caseload_tracker_numbers_supported))),
+    unlist(as.integer(unname(ini_file_settings$caseload_tracker_wemwbs_goals))))
+  
+  # Get the required field names from the ini file
+  caseload_tracker_field_names <- c(
+    unlist(names(ini_file_settings$caseload_tracker_demographics)),
+    unlist(names(ini_file_settings$caseload_tracker_numbers_supported)),
+    unlist(names(ini_file_settings$caseload_tracker_wemwbs_goals)))
+  
+  # Loop through each of the caseload tracker worksheets
+  for(s in sheets){
+    # Read in all bar the first two lines of the sheets (the headers)
+    df_tmp <- read_excel(path = path, 
+                         sheet = s,
+                         col_type = 'text', 
+                         col_names = (ini_file_settings$caseload_tracker_import$header==TRUE),
+                         skip = as.integer(ini_file_settings$caseload_tracker_import$skip)
+    ) %>% 
+      # Select the required fields and rename them
+      select(all_of(caseload_tracker_field_numbers)) %>%
+      rename_with(.fn = ~caseload_tracker_field_names) %>%
+      # Ignore any rows that don't have an ID
+      dplyr::filter(!is.na(ct_id))
+    
+    # Bind to the combined data frame
+    df <- df %>% bind_rows(df_tmp)
+  }
+  
+  # Format the columns to required format
+  df <- df %>% 
+    mutate(ct_age = as.integer(ct_age),
+           ct_status = as.factor(ct_status),
+           ct_closure = as.factor(ct_closure),
+           ct_start = as.Date(as.integer(ct_start), origin = '1899-12-30'),
+           ct_end = as.Date(as.integer(ct_end), origin = '1899-12-30'),
+           ct_wemwbs_score_in = as.integer(ct_wemwbs_score_in),
+           ct_wemwbs_score_out = as.integer(ct_wemwbs_score_out),
+           ct_goals_in = as.integer(ct_goals_in),
+           ct_goals_out = as.integer(ct_goals_out))
+  
+  return(df)
+}
+
+# * * * 1.2.1.2. Import Functions: Caseload Tracker Data Quality ----
+fnCaseloadTrackerDataQuality <- function(df){
+  log <- file(description = 'caseload_tracker_data_quality.log',
+              open = 'wt')
+  cat('Field, Applicable Entries, Valid Entries\n', file = log)
+  # ct_id: all should be valid as previously filter on !is.na
+  log_entry <- sprintf('ct_id,%d,%d\n', 
+                       NROW(df), 
+                       df %>% dplyr::filter(!is.na(ct_id)) %>% NROW())
+  cat(log_entry, file = log)
+  # ct_gender: should be either 'Male' or 'Female'
+  log_entry <- sprintf('ct_gender,%d,%d\n', 
+                       NROW(df), 
+                       df %>% dplyr::filter(ct_gender %in% c('Male', 'Female')) %>% NROW())
+  cat(log_entry, file = log)
+  # ct_age: should be an integer and not NA 
+  log_entry <- sprintf('ct_age,%d,%d\n', 
+                       NROW(df), 
+                       df %>% dplyr::filter(is.integer(ct_age)) %>% NROW())
+  cat(log_entry, file = log)
+  # ct_loneliness_in: should be 'Yes' or 'No' for any Open or Closed cases (Paused or Pre-Engagement ignored)
+  log_entry <- sprintf('ct_loneliness_in,%d,%d\n', 
+                       df %>% dplyr::filter(ct_status %in% c('Open', 'Closed')) %>% NROW(),
+                       df %>% dplyr::filter(ct_status %in% c('Open', 'Closed') & ct_loneliness_in %in% c('Yes','No')) %>% NROW())
+  cat(log_entry, file = log)
+  # ct_loneliness_out: should be 'Yes' or 'No' for any Open or Closed cases (Paused or Pre-Engagement ignored)
+  log_entry <- sprintf('ct_loneliness_out,%d,%d\n', 
+                       df %>% dplyr::filter(ct_status %in% c('Open', 'Closed')) %>% NROW(),
+                       df %>% dplyr::filter(ct_status %in% c('Open', 'Closed') & ct_loneliness_out %in% c('Yes','No')) %>% NROW())
+  cat(log_entry, file = log)
+  # ct_postcode: should be anything but NA
+  log_entry <- sprintf('ct_postcode,%d,%d\n', 
+                       NROW(df),
+                       df %>% dplyr::filter(!is.na(ct_postcode)) %>% NROW())
+  cat(log_entry, file = log)
+  # ct_status: should be 'Open', 'Closed', 'Paused', 'Pre-engagement'
+  log_entry <- sprintf('ct_status,%d,%d\n', 
+                       NROW(df),
+                       df %>% dplyr::filter(ct_status %in% c('Open', 'Closed', 'Paused', 'Pre-engagement')) %>% NROW())
+  cat(log_entry, file = log)
+  # ct_closure: should be 'Closed successfully', 'Disengaged', 'Non-engagement', 'Declined', 'Exempt', 'Incorrect contact details' when ct_stauts is 'Closed'
+  log_entry <- sprintf('ct_closure,%d,%d\n', 
+                       df %>% dplyr::filter(ct_status=='Closed') %>% NROW(),
+                       df %>% dplyr::filter(ct_status=='Closed' & ct_closure %in% c('Closed successfully', 'Disengaged', 'Non-engagement', 'Declined', 'Exempt', 'Incorrect contact details')) %>% NROW())
+  cat(log_entry, file = log)
+  # ct_start: should be a valid date unless ct_status is 'Pre-engagement' or ct_closure is 'Declined', 'Exempt', 'Incorrect contact details', 'Non-engagement'
+  log_entry <- sprintf('ct_start,%d,%d\n', 
+                       df %>% dplyr::filter(ct_status!='Pre-engagement' & !(ct_closure %in% c('Declined', 'Exempt', 'Incorrect contact details', 'Non-engagement'))) %>% NROW(),
+                       df %>% dplyr::filter(ct_status!='Pre-engagement' & !(ct_closure %in% c('Declined', 'Exempt', 'Incorrect contact details', 'Non-engagement')) &!is.na(ct_start)) %>% NROW())
+  cat(log_entry, file = log)
+  # ct_end: should be a valid date if ct_status is 'Closed'
+  log_entry <- sprintf('ct_end,%d,%d\n', 
+                       df %>% dplyr::filter(ct_status == 'Closed') %>% NROW(),
+                       df %>% dplyr::filter(ct_status == 'Closed' & !is.na(ct_end)) %>% NROW())
+  cat(log_entry, file = log)
+  # ct_wemwbs_score_in: should be an integer unless ct_closure is 'Declined', 'Exempt', 'Incorrect contact details' or ct_status is 'Pre-engagement'
+  log_entry <- sprintf('ct_wemwbs_score_in,%d,%d\n', 
+                       df %>% dplyr::filter(ct_status!='Pre-engagement' & !(ct_closure %in% c('Declined', 'Exempt', 'Incorrect contact details'))) %>% NROW(),
+                       df %>% dplyr::filter(ct_status!='Pre-engagement' & !(ct_closure %in% c('Declined', 'Exempt', 'Incorrect contact details')) & !is.na(ct_wemwbs_score_in)) %>% NROW())
+  cat(log_entry, file = log)
+  # ct_wemwbs_score_out: should be an integer if ct_status is 'Closed' unless ct_closure is 'Declined', 'Exempt', 'Incorrect contact details'
+  log_entry <- sprintf('ct_wemwbs_score_out,%d,%d\n', 
+                       df %>% dplyr::filter(ct_status=='Closed' & !(ct_closure %in% c('Declined', 'Exempt', 'Incorrect contact details'))) %>% NROW(),
+                       df %>% dplyr::filter(ct_status=='Closed' & !(ct_closure %in% c('Declined', 'Exempt', 'Incorrect contact details')) & !is.na(ct_wemwbs_score_out)) %>% NROW())
+  cat(log_entry, file = log)  
+  # ct_goals_in: should be an integer unless ct_closure is 'Declined', 'Exempt', 'Incorrect contact details'
+  log_entry <- sprintf('ct_goals_in,%d,%d\n', 
+                       df %>% dplyr::filter(ct_status!='Pre-engagement' & !(ct_closure %in% c('Declined', 'Exempt', 'Incorrect contact details'))) %>% NROW(),
+                       df %>% dplyr::filter(ct_status!='Pre-engagement' & !(ct_closure %in% c('Declined', 'Exempt', 'Incorrect contact details')) & !is.na(ct_goals_in)) %>% NROW())
+  cat(log_entry, file = log)
+  # ct_goals_out: should be an integer if ct_status is 'Closed' unless ct_closure is 'Declined', 'Exempt', 'Incorrect contact details'
+  log_entry <- sprintf('ct_goals_out,%d,%d\n', 
+                       df %>% dplyr::filter(ct_status=='Closed' & !(ct_closure %in% c('Declined', 'Exempt', 'Incorrect contact details'))) %>% NROW(),
+                       df %>% dplyr::filter(ct_status=='Closed' & !(ct_closure %in% c('Declined', 'Exempt', 'Incorrect contact details')) & !is.na(ct_goals_out)) %>% NROW())
+  cat(log_entry, file = log)  
+  close(log)
+}
+
+# * * * 1.2.1.3. Import Functions: Reporting Workbook - Data Points ----
+fnImportReportingWorkbook_DataPoints <- function(path, sheet = 'Data Points'){
+  # Only import the first 3 columns of the sheet and set the variable type
+  df <- read_excel(path, sheet, range = cell_cols('A:C'), col_types = c('date','text','numeric')) %>%
+    # Rename the column names as previously these have overwritten by caseworkers
+    rename_with(.fn = ~c('month', 'metric', 'value')) %>% 
+    # Remove any rows that have no month or no value
+    dplyr::filter(!is.na(month) & !is.na(value)) %>%
+    # Add the source filename to the data
+    mutate(source = basename(file.path(f)))
+  # Return the data frame
+  return(df)
+}
+
+# * * * 1.2.1.4. Import Functions: Reporting Workbook - Support and Referrals ----
+fnImportReportingWorkbook_SupportReferrals <- function(path, sheet = 'Support and Referrals'){
+  # Only import the first 4 columns of the sheet and set the variable type
+  df <- read_excel(path, sheet, range = cell_cols('A:D'), col_types = c('text','date','text','text')) %>%
+    # Rename the column names as previously these have overwritten by caseworkers
+    rename_with(.fn = ~c('client_id', 'month', 'section', 'support')) %>% 
+    # Remove any rows that have an NA in column
+    dplyr::filter( !(is.na(client_id) | is.na(month) | is.na(section) | is.na(support))) %>%
+    # Add the source filename to the data
+    mutate(source = basename(file.path(f)))
+  # Return the data frame
+  return(df)
+}
+
+# * * * 1.2.1.5. Import Functions: Reporting Workbook - Outputs ----
+fnImportReportingWorkbook_Outputs <- function(path, sheet = 'Outputs'){
+  # Only import the first 4 columns of the sheet and set the variable type
+  df <- read_excel(path, sheet, range = cell_cols('A:D'), col_types = c('text','date','text','text')) %>%
+    # Rename the column names as previously these have overwritten by caseworkers
+    rename_with(.fn = ~c('client_id', 'month', 'section', 'output')) %>% 
+    # Remove any rows that have an NA in column
+    dplyr::filter( !(is.na(client_id) | is.na(month) | is.na(section) | is.na(output))) %>%
+    # Add the source filename to the data
+    mutate(source = basename(file.path(f)))
+  # Return the data frame
+  return(df)
+}
+
+# * * * 1.2.1.6. Import Functions: Reporting Workbook - Outcomes ----
+fnImportReportingWorkbook_Outcomes <- function(path, sheet = 'Outcomes'){
+  # Only import the first 4 columns of the sheet and set the variable type
+  df <- read_excel(path = f, 
+                       sheet = 'Outcomes', 
+                       range = cell_cols('A:D'), 
+                       col_types = c('text','date','text','text')) %>%
+    # Rename the column names as previously these have overwritten by caseworkers
+    rename_with(.fn = ~c('client_id', 'month', 'section', 'outcome')) %>% 
+    # Remove any rows that have an NA in column
+    dplyr::filter( !(is.na(client_id) | is.na(month) | is.na(section) | is.na(outcome))) %>%
+    # Add the source filename to the data
+    mutate(source = basename(file.path(f)))
+  
+  # Return the data frame
+  return(df)
+}
+
+# * * 1.2.3. Headlines Section ----
+
+# * * * 1.2.3.1. Headlines Section: New Clients Supported ----
+fnGetNewClientsSupported <- function(df_ct){
+  # Initialise the variables to receive the data
+  curr_month <- as.integer(NA)
+  q1 <- as.integer(NA)
+  q2 <- as.integer(NA)
+  q3 <- as.integer(NA)
+  q4 <- as.integer(NA)
+  ytd <- as.integer(NA)
+  
+  # Filter the input data frame to the selected cohort
+  
+  # Anyone with a ct_start within the period but without a ct_closure in the exception list in the ini file 
+  # i.e. 'Declined', 'Non-engagement', 'Exempt', 'Incorrect contact details' see ini file [caseload_tracker_exclusions]
+  # section settings for the list of ct_closure exclusions
+  df_tmp <- df_ct %>% dplyr::filter(!(ct_closure %in% unlist(unname(ini_file_settings$caseload_tracker_exclusions))))
+  
+  # Trim the data to end at the end of the current month
+  df_tmp <- df_tmp %>% dplyr::filter(ct_start <= dt_current_month + months(1))
+  
+  # Calculate for each period
+  curr_month <- df_tmp %>% dplyr::filter((ct_start >= dt_current_month) & 
+                                           (ct_start < dt_current_month + months(1))) %>% NROW()
+  if(dt_current_month >= dt_year_start)
+    q1 <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start) & 
+                                     (ct_start < dt_year_start + months(3))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(3))
+    q2 <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start + months(3)) & 
+                                     (ct_start < dt_year_start + months(6))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(6))
+    q3 <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start + months(6)) & 
+                                     (ct_start < dt_year_start + months(9))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(9))
+    q4 <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start + months(9)) & 
+                                     (ct_start < dt_year_start + months(12))) %>% NROW()
+  if(dt_current_month >= dt_year_start)
+    ytd <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start) & 
+                                      (ct_start < dt_year_start + months(12))) %>% NROW()
+  df_tmp <- data.frame(metric = 'New Clients Supported in Period',
+                       current_month = curr_month,
+                       q1 = q1,
+                       q2 = q2,
+                       q3 = q3,
+                       q4 = q4,
+                       ytd = ytd)
+  return(df_tmp)
+}
+
+# * * * 1.2.3.2. Headlines Section: Clients Supported in Period ----
+fnGetClientsSupported <- function(df_ct){
+  # Initialise the variables to receive the data
+  curr_month <- as.integer(NA)
+  q1 <- as.integer(NA)
+  q2 <- as.integer(NA)
+  q3 <- as.integer(NA)
+  q4 <- as.integer(NA)
+  ytd <- as.integer(NA)
+  
+  # Filter the input data frame to the selected cohort
+  
+  # Anyone with a ct_start before the end of the period and no end date or an end date that occurs after the 
+  # start of the period, and a further check to ensure the ct_start >= ct_end if both are present and
+  # without a ct_closure in the exception list in the ini file 
+  # i.e. 'Declined', 'Non-engagement', 'Exempt', 'Incorrect contact details' see ini file [caseload_tracker_exclusions]
+  # section settings for the list of ct_closure exclusions
+  df_tmp <- df_ct %>% dplyr::filter(!(ct_closure %in% unlist(unname(ini_file_settings$caseload_tracker_exclusions))))
+  
+  # Trim the data to end at the end of the current month
+  df_tmp <- df_tmp %>% dplyr::filter(ct_start <= dt_current_month + months(1) & 
+                                       (is.na(ct_end) | (ct_end < dt_current_month + months(1))))
+  
+  # Calculate for each period
+  curr_month <- df_tmp %>% dplyr::filter((ct_start < dt_current_month + months(1)) & 
+                                           (is.na(ct_end) | (ct_end >= dt_current_month & ct_start <= ct_end))) %>% NROW()
+  if(dt_current_month >= dt_year_start)
+    q1 <- df_tmp %>% dplyr::filter((ct_start < dt_year_start + months(3)) & 
+                                     (is.na(ct_end) | (ct_end >= dt_year_start & ct_start <= ct_end))) %>% NROW()
+  if(dt_current_month >= dt_year_start)
+    q2 <- df_tmp %>% dplyr::filter((ct_start < dt_year_start + months(6)) & 
+                                     (is.na(ct_end) | (ct_end >= dt_year_start + months(3) & ct_start <= ct_end))) %>% NROW()
+  if(dt_current_month >= dt_year_start)
+    q3 <- df_tmp %>% dplyr::filter((ct_start < dt_year_start + months(9)) & 
+                                     (is.na(ct_end) | (ct_end >= dt_year_start + months(6) & ct_start <= ct_end))) %>% NROW()
+  if(dt_current_month >= dt_year_start)
+    q4 <- df_tmp %>% dplyr::filter((ct_start < dt_year_start + months(12)) & 
+                                     (is.na(ct_end) | (ct_end >= dt_year_start + months(9) & ct_start <= ct_end))) %>% NROW()
+  if(dt_current_month >= dt_year_start)
+    ytd <- df_tmp %>% dplyr::filter((ct_start < dt_year_start + months(12)) & 
+                                      (is.na(ct_end) | (ct_end >= dt_year_start & ct_start <= ct_end))) %>% NROW()
+  df_tmp <- data.frame(metric = 'Clients Supported in Period',
+                       current_month = curr_month,
+                       q1 = q1,
+                       q2 = q2,
+                       q3 = q3,
+                       q4 = q4,
+                       ytd = ytd)
+  return(df_tmp)
+}
+
+# * * * 1.2.3.3. Headlines Section: Previous 3 Month Activity for Clients Supported in Period ----
+#   ED Attendances*
+#   Emergency Admissions*
+#   Ambulance Conveyances*
+# * * * 1.2.3.4. Headlines Section: Previous 12 Month Activity for Clients Supported in Period ----
+#   ED Attendances*
+#   Emergency Admissions*
+#   Ambulance Conveyances*
+
+# * * 1.2.4. Changes in Activity Section ----
+# * * * 1.2.4.1. Changes in Activity Section: New Clients Supported in Period: As per 1.2.3.1. ----
+
+# * * * 1.2.4.2. Changes in Activity Section: Reduction in Activity 3 months ----
+#   ED Attendances*
+#   Emergency Admissions*
+#   Ambulance Conveyances*
+# * * * 1.2.4.3. Changes in Activity Section: Reduction in Activity 12 months ----
+#   ED Attendances*
+#   Emergency Admissions*
+#   Ambulance Conveyances*
+
+# * * * 1.2.4.4. Changes in Activity Section: Reduction in Loneliness at End of Support ----
+fnGetReductionInLoneliness <- function(df_ct){
+  # Initialise the variables to receive the data
+  curr_month <- as.integer(NA)
+  q1 <- as.integer(NA)
+  q2 <- as.integer(NA)
+  q3 <- as.integer(NA)
+  q4 <- as.integer(NA)
+  ytd <- as.integer(NA)
+  
+  # Filter the input data frame to the selected cohort
+  
+  # Anyone with a ct_end within the period and without a ct_closure in the exception list in the ini file 
+  # i.e. 'Declined', 'Non-engagement', 'Exempt', 'Incorrect contact details' see ini file [caseload_tracker_exclusions]
+  # section settings for the list of ct_closure exclusions
+  df_tmp <- df_ct %>% dplyr::filter(!(ct_closure %in% unlist(unname(ini_file_settings$caseload_tracker_exclusions))))
+  
+  # and who had a 'Yes' for the loneliness question on entry and a 'No' for the loneliness question on exit
+  df_tmp <- df_tmp %>% dplyr::filter(ct_loneliness_in=='Yes' & ct_loneliness_out=='No')
+
+  # Trim the data to end at the end of the current month
+  df_tmp <- df_tmp %>% dplyr::filter(ct_end <= dt_current_month + months(1))
+  
+  # Calculate for each period
+  curr_month <- df_tmp %>% dplyr::filter((ct_end >= dt_current_month) & 
+                                           (ct_end < dt_current_month + months(1))) %>% NROW()
+  if(dt_current_month >= dt_year_start)
+    q1 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start) & 
+                                     (ct_end < dt_year_start + months(3))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(3))
+    q2 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(3)) & 
+                                     (ct_end < dt_year_start + months(6))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(6))
+    q3 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(6)) & 
+                                     (ct_end < dt_year_start + months(9))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(9))
+    q4 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(9)) & 
+                                     (ct_end < dt_year_start + months(12))) %>% NROW()
+  if(dt_current_month >= dt_year_start)
+    ytd <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start) & 
+                                      (ct_end < dt_year_start + months(12))) %>% NROW()
+  df_tmp <- data.frame(metric = 'Reduction in Loneliness at End of Support',
+                       current_month = curr_month,
+                       q1 = q1,
+                       q2 = q2,
+                       q3 = q3,
+                       q4 = q4,
+                       ytd = ytd)
+  return(df_tmp)
+}
+
+  
+# * * * 1.2.4.5. Changes in Activity Section: Improved Wellbeing at End of Support ----
+fnGetIncreasedWEMWBSOnExit <- function(df_ct){
+  # Initialise the variables to receive the data
+  curr_month <- as.integer(NA)
+  q1 <- as.integer(NA)
+  q2 <- as.integer(NA)
+  q3 <- as.integer(NA)
+  q4 <- as.integer(NA)
+  ytd <- as.integer(NA)
+  
+  # Filter the input data frame to the selected cohort
+  
+  # Anyone with a ct_end within the period and without a ct_closure in the exception list in the ini file 
+  # i.e. 'Declined', 'Non-engagement', 'Exempt', 'Incorrect contact details' see ini file [caseload_tracker_exclusions]
+  # section settings for the list of ct_closure exclusions
+  df_tmp <- df_ct %>% dplyr::filter(!(ct_closure %in% unlist(unname(ini_file_settings$caseload_tracker_exclusions))))
+  
+  # and who had an  increase in WEMWBS score on exit
+  df_tmp <- df_tmp %>% dplyr::filter(ct_wemwbs_score_out > ct_wemwbs_score_in)
+  
+  # Trim the data to end at the end of the current month
+  df_tmp <- df_tmp %>% dplyr::filter(ct_end <= dt_current_month + months(1))
+  
+  # Calculate for each period
+  curr_month <- df_tmp %>% dplyr::filter((ct_end >= dt_current_month) & 
+                                           (ct_end < dt_current_month + months(1))) %>% NROW()
+  if(dt_current_month >= dt_year_start)
+    q1 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start) & 
+                                     (ct_end < dt_year_start + months(3))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(3))
+    q2 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(3)) & 
+                                     (ct_end < dt_year_start + months(6))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(6))
+    q3 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(6)) & 
+                                     (ct_end < dt_year_start + months(9))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(9))
+    q4 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(9)) & 
+                                     (ct_end < dt_year_start + months(12))) %>% NROW()
+  if(dt_current_month >= dt_year_start)
+    ytd <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start) & 
+                                      (ct_end < dt_year_start + months(12))) %>% NROW()
+  df_tmp <- data.frame(metric = 'Improved Wellbeing at End of Support',
+                       current_month = curr_month,
+                       q1 = q1,
+                       q2 = q2,
+                       q3 = q3,
+                       q4 = q4,
+                       ytd = ytd)
+  return(df_tmp)
+}
+
+
+# * * * 1.2.4.6. Changes in Activity Section: Progressing at Least one Goal ----
+fnGetProgressingAtLeastOneGoal <- function(df_ct){
+  # Initialise the variables to receive the data
+  curr_month <- as.integer(NA)
+  q1 <- as.integer(NA)
+  q2 <- as.integer(NA)
+  q3 <- as.integer(NA)
+  q4 <- as.integer(NA)
+  ytd <- as.integer(NA)
+  
+  # Filter the input data frame to the selected cohort
+  
+  # Anyone with a ct_end within the period and without a ct_closure in the exception list in the ini file 
+  # i.e. 'Declined', 'Non-engagement', 'Exempt', 'Incorrect contact details' see ini file [caseload_tracker_exclusions]
+  # section settings for the list of ct_closure exclusions
+  df_tmp <- df_ct %>% dplyr::filter(!(ct_closure %in% unlist(unname(ini_file_settings$caseload_tracker_exclusions))))
+  
+  # and who completed at least one goal on exit
+  df_tmp <- df_tmp %>% dplyr::filter(ct_goals_out >= 1)
+  
+  # Trim the data to end at the end of the current month
+  df_tmp <- df_tmp %>% dplyr::filter(ct_end <= dt_current_month + months(1))
+  
+  # Calculate for each period
+  curr_month <- df_tmp %>% dplyr::filter((ct_end >= dt_current_month) & 
+                                           (ct_end < dt_current_month + months(1))) %>% NROW()
+  if(dt_current_month >= dt_year_start)
+    q1 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start) & 
+                                     (ct_end < dt_year_start + months(3))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(3))
+    q2 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(3)) & 
+                                     (ct_end < dt_year_start + months(6))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(6))
+    q3 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(6)) & 
+                                     (ct_end < dt_year_start + months(9))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(9))
+    q4 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(9)) & 
+                                     (ct_end < dt_year_start + months(12))) %>% NROW()
+  if(dt_current_month >= dt_year_start)
+    ytd <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start) & 
+                                      (ct_end < dt_year_start + months(12))) %>% NROW()
+  df_tmp <- data.frame(metric = 'Completed At Least One Goal at End of Support',
+                       current_month = curr_month,
+                       q1 = q1,
+                       q2 = q2,
+                       q3 = q3,
+                       q4 = q4,
+                       ytd = ytd)
+  return(df_tmp)
+}
+
+# * * * 1.2.4.7. Changes in Activity Section: Clients Ending Support ----
+fnGetClientsEndingSupport <- function(df_ct){
+  # Initialise the variables to receive the data
+  curr_month <- as.integer(NA)
+  q1 <- as.integer(NA)
+  q2 <- as.integer(NA)
+  q3 <- as.integer(NA)
+  q4 <- as.integer(NA)
+  ytd <- as.integer(NA)
+  
+  # Filter the input data frame to the selected cohort
+  
+  # Anyone with a ct_end within the period and without a ct_closure in the exception list in the ini file 
+  # i.e. 'Declined', 'Non-engagement', 'Exempt', 'Incorrect contact details' see ini file [caseload_tracker_exclusions]
+  # section settings for the list of ct_closure exclusions
+  df_tmp <- df_ct %>% dplyr::filter(!(ct_closure %in% unlist(unname(ini_file_settings$caseload_tracker_exclusions))))
+  
+  # Trim the data to end at the end of the current month
+  df_tmp <- df_tmp %>% dplyr::filter(ct_end <= dt_current_month + months(1))
+  
+  # Calculate for each period
+  curr_month <- df_tmp %>% dplyr::filter((ct_end >= dt_current_month) & 
+                                           (ct_end < dt_current_month + months(1))) %>% NROW()
+  if(dt_current_month >= dt_year_start)
+    q1 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start) & 
+                                     (ct_end < dt_year_start + months(3))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(3))
+    q2 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(3)) & 
+                                     (ct_end < dt_year_start + months(6))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(6))
+    q3 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(6)) & 
+                                     (ct_end < dt_year_start + months(9))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(9))
+    q4 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(9)) & 
+                                     (ct_end < dt_year_start + months(12))) %>% NROW()
+  if(dt_current_month >= dt_year_start)
+    ytd <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start) & 
+                                      (ct_end < dt_year_start + months(12))) %>% NROW()
+  df_tmp <- data.frame(metric = 'Clients Ending Support',
+                       current_month = curr_month,
+                       q1 = q1,
+                       q2 = q2,
+                       q3 = q3,
+                       q4 = q4,
+                       ytd = ytd)
+  return(df_tmp)
+}
+
+# * * * 1.2.4.8. Changes in Activity Section: People Reporting a Positive Experience ----
+
+
+# 2. Import data ----
+# ═══════════════════
+ini_file_settings <- read.ini(ini_file)
+
+# Select the caseload tracker sheet from the excel workbook
+caseload_tracker_sheets <- readxl::excel_sheets(path = caseload_tracker_file)
+caseload_tracker_sheets <- svDialogs::dlgList(choices = caseload_tracker_sheets, title = 'Select the CASELOAD TRACKER sheet(s)', multiple = TRUE)$res
+
+# * 2.1. Caseload tracker ----
+# ────────────────────────────
+
+df_caseload_tracker <- fnImportCaseloadTracker(path = caseload_tracker_file,
+                                               sheets = caseload_tracker_sheets)
+
+fnCaseloadTrackerDataQuality(df_caseload_tracker)
+
+# * 2.2. Reporting Workbooks ----
+# ───────────────────────────────
+
+# Initialise the data frames to receive the data
+df_data_points <- data.frame()
+df_support_and_referrals <- data.frame()
+df_outputs <- data.frame()
+df_outcomes <- data.frame()
+
+# Loop through each reporting workbook
+for(f in reporting_workbook_filelist){
+  df_data_points <- df_data_points %>% bind_rows(fnImportReportingWorkbook_DataPoints(path = f))
+  df_support_and_referrals <- df_support_and_referrals %>% bind_rows(fnImportReportingWorkbook_SupportReferrals(path = f))
+  df_outputs <- df_outputs %>% bind_rows(fnImportReportingWorkbook_Outputs(path = f))
+  df_outcomes <- df_outcomes %>% bind_rows(fnImportReportingWorkbook_Outcomes(path = f))
+}
+
+# 3. Process Data ----
+# ════════════════════
+
+# * 3.1. Headline Section ----
+# ────────────────────────────
+
+# New Clients Supported in Period
+# Clients Supported in Period
+# Previous 3 Month Activity for Clients Supported in Period:
+#   ED Attendances*
+#   Emergency Admissions*
+#   Ambulance Conveyances*
+# Previous 12 Month Activity for Clients Supported in Period:
+#   ED Attendances*
+#   Emergency Admissions*
+#   Ambulance Conveyances*
+# ──────────────────────────────────────────────────────────────────────────────────
+# NOTE: The sections marked * will need to be sourced from the RDUH BI team's report
+# ──────────────────────────────────────────────────────────────────────────────────
+
+df_headline_section <- data.frame(metric = as.character(),
+                                  current_month = as.numeric(),
+                                  q1 = as.numeric(),
+                                  q2 = as.numeric(),
+                                  q3 = as.numeric(),
+                                  q4 = as.numeric(),
+                                  ytd = as.numeric())
+
+# New Clients Supported
+df_headline_section <- df_headline_section %>% bind_rows(fnGetNewClientsSupported(df_caseload_tracker))
+
+# Clients Supported
+df_headline_section <- df_headline_section %>% bind_rows(fnGetClientsSupported(df_caseload_tracker))
+
+# Previous Activity 3 and 12 Month: ED | EM | AMB 
+# Currently we are awaiting the RDUH BI Team's report to populate the following metrics
+df_tmp <- data.frame(metric = c('Previous 3 Month Activity for Clients Supported in Period: ED Attendances',
+                                'Previous 3 Month Activity for Clients Supported in Period: Emergency Admissions',
+                                'Previous 3 Month Activity for Clients Supported in Period: Ambulance Conveyances',
+                                'Previous 12 Month Activity for Clients Supported in Period: ED Attendances',
+                                'Previous 12 Month Activity for Clients Supported in Period: Emergency Admissions',
+                                'Previous 12 Month Activity for Clients Supported in Period: Ambulance Conveyances'),
+                     current_month = rep(NA, 6),
+                     q1 = rep(NA, 6),
+                     q2 = rep(NA, 6),
+                     q3 = rep(NA, 6),
+                     q4 = rep(NA, 6),
+                     ytd = rep(NA, 6))
+df_headline_section <- df_headline_section %>% bind_rows(df_tmp)
+
+# * 3.2. Changes in Activity Section ----
+# ───────────────────────────────────────
+
+# New Clients Supported in Period
+# Reduction in Activity Starting 3 months from Intervention Start (NHSE Target 40%):
+#   ED Attendances*
+#   Emergency Admissions*
+#   Ambulance Conveyances*
+# Reduction in Activity 12 months Prior vs. 12 months Post Intervention (OND Target 40%)
+#   ED Attendances*
+#   Emergency Admissions*
+#   Ambulance Conveyances*
+# Reduction in People Experiencing Loneliness at End of Support (NHSE Target 66%)
+# Clients Ending Support and Experiencing Improved Wellbeing
+# People Progressing at Least one Goal (OND Target 90%)
+# Clients Ending Support
+# People Reporting a Positive Experience from our Support (NHSE Target 80%)**
+# ─────────────────────────────────────────────────────────────────────────────────
+# NOTE: The metrics marked * will need to be sourced from the RDUH BI team's report
+#       The metrics marked ** are not available in the current data collections
+# ─────────────────────────────────────────────────────────────────────────────────
+
+df_activity_section <- data.frame(metric = as.character(),
+                                  current_month = as.numeric(),
+                                  q1 = as.numeric(),
+                                  q2 = as.numeric(),
+                                  q3 = as.numeric(),
+                                  q4 = as.numeric(),
+                                  ytd = as.numeric())
+
+# New Clients Supported in Period
+df_activity_section <- df_activity_section %>% bind_rows(fnGetNewClientsSupported(df_caseload_tracker))
+
+# Reduction in Activity 3 and 12 Month: ED | EM | AMB 
+# Currently we are awaiting the RDUH BI Team's report to populate the following metrics
+df_tmp <- data.frame(metric = c('Reduction in Activity Starting 3 months from Intervention Start (NHSE Target 40%): ED Attendances',
+                                'Reduction in Activity Starting 3 months from Intervention Start (NHSE Target 40%): Emergency Admissions',
+                                'Reduction in Activity Starting 3 months from Intervention Start (NHSE Target 40%): Ambulance Conveyances',
+                                'Reduction in Activity 12 months Prior vs. 12 months Post Intervention (OND Target 40%): ED Attendances',
+                                'Reduction in Activity 12 months Prior vs. 12 months Post Intervention (OND Target 40%): Emergency Admissions',
+                                'Reduction in Activity 12 months Prior vs. 12 months Post Intervention (OND Target 40%): Ambulance Conveyances'),
+                     current_month = rep(NA, 6),
+                     q1 = rep(NA, 6),
+                     q2 = rep(NA, 6),
+                     q3 = rep(NA, 6),
+                     q4 = rep(NA, 6),
+                     ytd = rep(NA, 6))
+df_activity_section <- df_activity_section %>% bind_rows(df_tmp)
+
+# Reduction in People Experiencing Loneliness at End of Support (NHSE Target 66%)
+# This makes the assumption that we will improve the experiencing loneliness support on entry and exit
+df_activity_section <- df_activity_section %>% bind_rows(fnGetReductionInLoneliness(df_ct = df_caseload_tracker))
+
+# Clients Ending Support and Experiencing Improved Wellbeing
+# This makes the assumption that we will improve the WEMWBS on entry and exit
+df_activity_section <- df_activity_section %>% bind_rows(fnGetIncreasedWEMWBSOnExit(df_ct = df_caseload_tracker))
+
+# People Progressing at Least one Goal (OND Target 90%)
+df_activity_section <- df_activity_section %>% bind_rows(fnGetProgressingAtLeastOneGoal(df_ct = df_caseload_tracker))
+
+# Clients Ending Support
+df_activity_section <- df_activity_section %>% bind_rows(fnGetClientsEndingSupport(df_ct = df_caseload_tracker))
+
+# People Reporting a Positive Experience from our Support (NHSE Target 80%)**
+# This metric is currently not recorded
+
+# * 3.3. Process KPIs Section ----
+# ────────────────────────────────
+
+# 80% of New Clients have an Entry WEMWBS Score
+# 80% of Closed Clients have an Exit WEMWBS Score 
+# 80% of New Clients have a Entry Loneliness Answer (Yes/No) 
+# 80% of Closed Clients have a Exit Loneliness Answer (Yes/No)
+
+
+
+# * 3.4. Data Points Section ----
+# ───────────────────────────────
+
+# Number of wider beneficiaries
+# Clients who declined
+# Total current open cases*
+# Cases concluded successfully
+# Cases closed due to disengagement
+# Cases closed due to death
+# Cases closed - other (moved away etc)
+# Number of contacts interventions with clients
+# ────────────────────────────────────────────────────────────────────
+# NOTE: The metrics marked * will be sourced from the caseload tracker
+# ────────────────────────────────────────────────────────────────────
+
+# * 3.5. Support Provided Section ----
+# ────────────────────────────────────
+
+# TAP conducted
+# Flow meeting with FC and lead professional
+# Number of individual 1:1 interactions
+# Continued ongoing contacts with professionals
+# Caseworker research undertaken to find solutions for clients
+# Caseworker support to access personal health budgets
+# Caseworker support with form filling
+# Caseworker support with IT
+# Caseworker support to meet aspirations
+# Client involved in co-production work
+
+# * 3.6. Outputs Section ----
+# ───────────────────────────
+
+# Previous 3 months - Section
+# Previous 12 months - Section
+# Previous 3 months - Section and Metric - Greens only
+# Previous 12 months - Section and Metric - Greens only
+
+# * 3.7. Outcomes Section ----
+# ────────────────────────────
+
+# Previous 3 months - Section
+# Previous 12 months - Section
+# Previous 3 months - Section and Metric - Greens only
+# Previous 12 months - Section and Metric - Greens only
+
+# * 3.8. Impact Reporting Section ----
+# ────────────────────────────────────
+
+# Data Points
+# Support and Referrals
+# Outputs
+# Outcomes
+
