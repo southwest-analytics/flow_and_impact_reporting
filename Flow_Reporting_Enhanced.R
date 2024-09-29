@@ -7,8 +7,18 @@
 # Select ini file
 ini_file <- utils::choose.files(caption = 'Please select the INI FILE', multi = FALSE)
 
+# Select the project
+project_list <- c('Community Flow' = 2472, 'High Flow' = 2473,
+                  'Secondary Care' = 2474, 'Primary Care' = 2475,
+                  'Community Flow' = 2476)
+project_id <- project_list[utils::select.list(title = 'Select Flow Project', choices = names(project_list), multiple = FALSE, graphics = TRUE)]
+
 # Select caseload tracker
-caseload_tracker_file <- utils::choose.files(caption = 'Please select the CASELOAD TRACKERS to import', multi = FALSE)
+caseload_tracker_file <- utils::choose.files(caption = 'Please select the CASELOAD TRACKER to import', multi = FALSE)
+
+# Select activity file (for High Flow only)
+if(project_id == 2473)
+  activity_file <- utils::choose.files(caption = 'Please select the ED ACTIVITY file to import', multi = FALSE)
 
 # Select reporting Workbooks
 reporting_workbook_filelist <- utils::choose.files(caption = 'Please select the REPORTING WORKBOOKS to import', multi = TRUE)
@@ -40,6 +50,32 @@ library(conflicted)
 
 # * 1.2. Define functions ----
 # ────────────────────────────
+
+# * * 1.2.0. Glenday Functions ----
+# Glenday Palette 
+palGlenday <- scales::col_factor(
+  palette = c('Green' = 'darkgreen', 'Yellow' = 'gold', 'Blue' = 'royalblue', 'Red' = 'red3'),
+  levels = c('Green', 'Yellow', 'Blue', 'Red'))
+
+# Glenday Sieve
+fnGlenday <- function(df, var.x, var.y){
+  df <- df %>%
+    dplyr::filter(get(var.y) > 0) %>%
+    arrange(desc(get(var.y)), get(var.x)) %>%
+    mutate(pct = get(var.y)/ sum(get(var.y)),
+           cumpct = cumsum(pct),
+           lag_cumpct = dplyr::lag(cumpct),
+           glenday = if_else(cumpct <= 0.5 | (lag_cumpct < 0.5 & cumpct > 0.5),
+                             'Green',
+                             if_else(cumpct <= 0.95 | (lag_cumpct < 0.95 & cumpct > 0.95),
+                                     'Yellow',
+                                     if_else(cumpct <= 0.99 | (lag_cumpct < 0.99 & cumpct > 0.99),
+                                             'Blue','Red')))) %>%
+    select(-lag_cumpct) %>%
+    # Replace any NA values in glenday as Green
+    replace_na(replace = list(glenday = 'Green'))
+  return(df)
+}
 
 # * * 1.2.1. Import Functions ----
 
@@ -231,6 +267,63 @@ fnImportReportingWorkbook_Outcomes <- function(path, sheet = 'Outcomes'){
   # Return the data frame
   return(df)
 }
+
+# * * * 1.2.1.7. Import Functions: Activity Workbook ----
+fnImportActivityWorkbook <- function(path, sheet = 'All HIU Clients'){
+  # Only import the first 4 columns of the sheet and set the variable type
+  df <- read_excel(path = f, 
+                   sheet = sheet, 
+                   skip = 2,
+                   col_types = c('text', rep('numeric', 3), rep('date', 2), rep('numeric', 24)),
+                   col_names = FALSE) %>%
+    # Rename the column names as previously these have overwritten by caseworkers
+    rename_with(.fn = ~c('client_id', 
+                         'baseline_ed_3m', 'baseline_em_3m', 'baseline_amb_3m',
+                         'start_date', 'end_date',
+                         'em_3m_prior', 'em_3m_post_start', 'em_3m_during', 'em_3m_post_end',
+                         'ed_3m_prior', 'ed_3m_post_start', 'ed_3m_during', 'ed_3m_post_end',
+                         'amb_3m_prior', 'amb_3m_post_start', 'amb_3m_during', 'amb_3m_post_end',
+                         'em_12m_prior', 'em_12m_post_start', 'em_12m_during', 'em_12m_post_end',
+                         'ed_12m_prior', 'ed_12m_post_start', 'ed_12m_during', 'ed_12m_post_end',
+                         'amb_12m_prior', 'amb_12m_post_start', 'amb_12m_during', 'amb_12m_post_end')) %>%
+df %>% dplyr::filter(start_date >= dt_current_month &
+                       start_date < dt_current_month %m+% months(1)) %>%
+    summarise(across(.cols = c(2:4, 7:30), .fn = function(x){sum(x, na.rm = TRUE)})) %>%
+    mutate(ed_3m_prior = ed_3m_prior + amb_3m_prior,
+           ed_3m_post_start = ed_3m_post_start + amb_3m_post_start,
+           ed_3m_during = ed_3m_during + amb_3m_during,
+           ed_3m_post_end = ed_3m_post_end + amb_3m_post_end,
+           ed_12m_prior = ed_12m_prior + amb_12m_prior,
+           ed_12m_post_start = ed_12m_post_start + amb_12m_post_start,
+           ed_12m_during = ed_12m_during + amb_12m_during,
+           ed_12m_post_end = ed_12m_post_end + amb_12m_post_end) %>%
+    mutate(ed_pre_vs_post_start = sprintf('Pre (%d) to Post Start (%d) Percentage Change %.1f%%',
+                                          ed_3m_prior, ed_3m_post_start, (ed_3m_post_start - ed_3m_prior)/ed_3m_prior * 100),
+           ed_pre_vs_during = sprintf('Pre (%d) to During (%d) Percentage Change %.1f%%',
+                                      ed_3m_prior, ed_3m_post_start, (ed_3m_post_start - ed_3m_prior)/ed_3m_prior * 100),
+             
+             (ed_3m_during - ed_3m_prior)/ed_3m_prior,
+           ed_pre_vs_post_end = (ed_3m_post_end - ed_3m_prior)/em_3m_prior,
+           em_pre_vs_post_start = (em_3m_post_start - em_3m_prior)/em_3m_prior,
+           em_pre_vs_during = (em_3m_during - em_3m_prior)/em_3m_prior,
+           em_pre_vs_post_end = (em_3m_post_end - em_3m_prior)/em_3m_prior,
+           amb_pre_vs_post_start = (amb_3m_post_start - amb_3m_prior)/amb_3m_prior,
+           amb_pre_vs_during = (amb_3m_during - amb_3m_prior)/amb_3m_prior,
+           amb_pre_vs_post_end = (amb_3m_post_end - amb_3m_prior)/amb_3m_prior) %>%
+    data.frame()
+  
+dt_current_month <- as.Date('2024-07-01')
+
+    
+    # # Remove any rows that have an NA in column
+    # dplyr::filter( !(is.na(client_id) | is.na(month) | is.na(section) | is.na(outcome))) %>%
+    # # Add the source filename to the data
+    # mutate(source = basename(file.path(f)))
+  
+  # Return the data frame
+  return(df)
+}
+
 
 # * * 1.2.3. Headlines Section ----
 
@@ -870,7 +963,9 @@ fnGetExitLoneliness <- function(df_ct){
 # * * 1.2.6. Data Points Section ----
 
 # * * * 1.2.6.1. Data Points Section: Create main table ----
-fnGetDataPoints <- function(df_dp){
+fnGetDataPoints <- function(df_dp, metric_list){
+  df_metrics <- data.frame(metric = metric_list)
+  
   # Filter the data points to the selected metrics and up to and including the current month
   df_tmp <- df_dp %>% 
     dplyr::filter(metric %in% metric_list) %>%
@@ -931,6 +1026,17 @@ fnGetDataPoints <- function(df_dp){
         ungroup(),
       by = 'metric'
     )
+
+  # Ensure all metrics are represented and any NA are replaced with zero (for valid periods)  
+  df <- df %>% full_join(df_metrics, by = 'metric')  
+  replace_list <- list(current_month = 0, q1 = 0, ytd = 0)
+  if(dt_current_month >= dt_year_start %m+% months(3))
+    replace_list <- append(replace_list, list(q2 = 0))
+  if(dt_current_month >= dt_year_start %m+% months(6))
+    replace_list <- append(replace_list, list(q3 = 0))
+  if(dt_current_month >= dt_year_start %m+% months(9))
+    replace_list <- append(replace_list, list(q4 = 0))
+  df <- df %>% replace_na(replace_list)  
   
   # Return the data frame
   return(df)
@@ -952,25 +1058,249 @@ fnGetCaseLoad <- function(df_ct){
   # Get any record where the ct_start occurs before end of period and end date occurs 
   # after the end of the period or is NA (NB: census point data) no exclusions applied to 
   # this data
+  
   curr_month <- df_tmp %>% dplyr::filter(ct_start < dt_current_month %m+% months(1) &
                                            (is.na(ct_end) | ct_end >= dt_current_month %m+% months(1))) %>% NROW()
     
-  q1 <- df_tmp %>% dplyr::filter(ct_start < dt_year_start %m+% months(3) &
+  if(dt_current_month >= dt_year_start)
+    q1 <- df_tmp %>% dplyr::filter(ct_start < dt_year_start %m+% months(3) &
                                            (is.na(ct_end) | ct_end >= dt_year_start %m+% months(3))) %>% NROW()
-
+  if(dt_current_month >= dt_year_start  %m+% months(3))
   q2 <- df_tmp %>% dplyr::filter(ct_start < dt_year_start %m+% months(6) &
                                    (is.na(ct_end) | ct_end >= dt_year_start %m+% months(6))) %>% NROW()
 
-  q3 <- df_tmp %>% dplyr::filter(ct_start < dt_year_start %m+% months(9) &
+  if(dt_current_month >= dt_year_start %m+% months(6))
+    q3 <- df_tmp %>% dplyr::filter(ct_start < dt_year_start %m+% months(9) &
                                    (is.na(ct_end) | ct_end >= dt_year_start %m+% months(9))) %>% NROW()
   
-  q4 <- df_tmp %>% dplyr::filter(ct_start < dt_year_start %m+% months(9) &
+  if(dt_current_month >= dt_year_start %m+% months(9))
+    q4 <- df_tmp %>% dplyr::filter(ct_start < dt_year_start %m+% months(9) &
                                    (is.na(ct_end) | ct_end >= dt_year_start %m+% months(9))) %>% NROW()
   
-  ytd <- df_tmp %>% dplyr::filter(ct_start < dt_year_start %m+% months(9) &
+  if(dt_current_month >= dt_year_start)
+    ytd <- df_tmp %>% dplyr::filter(ct_start < dt_year_start %m+% months(9) &
                                    (is.na(ct_end) | ct_end >= dt_year_start %m+% months(9))) %>% NROW()
   
+  df <- data.frame(metric = 'Case Load at Census', current_month = curr_month,
+                   q1, q2, q3, q4, ytd)
+  return(df)
 }
+
+# * * 1.2.7. Support Provided Section ----
+
+# * * * 1.2.7.1. Support Provided Section: Create main table ----
+fnGetSupportProvided <- function(df_sr, metric_list){
+  df_metrics <- data.frame(metric = metric_list)
+
+  # Filter the data points to the selected metrics and up to and including the current month
+  df_tmp <- df_sr %>% 
+    mutate(metric = support) %>% 
+    dplyr::filter(metric %in% metric_list) %>%
+    dplyr::filter(month <= dt_current_month %m+% months(1)) %>%
+    group_by(month, metric) %>%
+    summarise(value = n(),
+              .groups = 'keep') %>%
+    ungroup()
+  
+  # Create the data points table
+  df <- df_tmp %>% 
+    dplyr::filter(month == dt_current_month) %>%
+    group_by(metric) %>%
+    summarise(current_month = sum(value, na.rm = TRUE)) %>%
+    ungroup() %>%
+    full_join(
+      df_tmp %>% 
+        dplyr::filter(month >= dt_year_start & 
+                        month < dt_year_start %m+% months(3)) %>%
+        group_by(metric) %>%
+        summarise(q1 = sum(value, na.rm = TRUE)) %>%
+        ungroup(),
+      by = 'metric'
+    ) %>%
+    full_join(
+      df_tmp %>% 
+        dplyr::filter(month >= dt_year_start %m+% months(3) & 
+                        month < dt_year_start %m+% months(6)) %>%
+        group_by(metric) %>%
+        summarise(q2 = sum(value, na.rm = TRUE)) %>%
+        ungroup(),
+      by = 'metric'
+    ) %>%
+    full_join(
+      df_tmp %>% 
+        dplyr::filter(month >= dt_year_start %m+% months(6) & 
+                        month < dt_year_start %m+% months(9)) %>%
+        group_by(metric) %>%
+        summarise(q3 = sum(value, na.rm = TRUE)) %>%
+        ungroup(),
+      by = 'metric'
+    ) %>%
+    full_join(
+      df_tmp %>% 
+        dplyr::filter(month >= dt_year_start %m+% months(9) & 
+                        month < dt_year_start %m+% months(12)) %>%
+        group_by(metric) %>%
+        summarise(q4 = sum(value, na.rm = TRUE)) %>%
+        ungroup(),
+      by = 'metric'
+    ) %>%
+    full_join(
+      df_tmp %>% 
+        dplyr::filter(month >= dt_year_start & 
+                        month < dt_year_start %m+% months(12)) %>%
+        group_by(metric) %>%
+        summarise(ytd = sum(value, na.rm = TRUE)) %>%
+        ungroup(),
+      by = 'metric'
+    )
+
+  # Ensure all metrics are represented and any NA are replaced with zero (for valid periods)  
+  df <- df %>% full_join(df_metrics, by = 'metric')  
+  replace_list <- list(current_month = 0, q1 = 0, ytd = 0)
+  if(dt_current_month >= dt_year_start %m+% months(3))
+    replace_list <- append(replace_list, list(q2 = 0))
+  if(dt_current_month >= dt_year_start %m+% months(6))
+    replace_list <- append(replace_list, list(q3 = 0))
+  if(dt_current_month >= dt_year_start %m+% months(9))
+    replace_list <- append(replace_list, list(q4 = 0))
+  df <- df %>% replace_na(replace_list)  
+  
+  # Return the data frame
+  return(df)
+}
+
+# * * 1.2.8. Outputs Section ----
+
+# * * * 1.2.8.1. Outputs 3m Section ----
+fnOutputs3mSection <- function(df_op){
+  df_tmp <- df_op %>% 
+    dplyr::filter(
+      as.Date(month) >= (dt_current_month %m+% months(-2)) & 
+        as.Date(month) < (dt_current_month %m+% months(1)) &
+        as.Date(month) >= dt_year_start) %>%
+  group_by(section) %>%
+  summarise(volume = n()) %>%
+  ungroup()
+  
+  df <- fnGlenday(df_tmp, var.x = 'section', var.y = 'volume')
+
+  return(df)
+}
+
+# * * * 1.2.8.2. Outputs 12m Section ----
+fnOutputs12mSection <- function(df_op){
+  df_tmp <- df_op %>% 
+    dplyr::filter(
+      as.Date(month) >= dt_year_start & 
+        as.Date(month) < (dt_current_month %m+% months(1)) &
+        as.Date(month) < (dt_year_start %m+% months(12))) %>%
+    group_by(section) %>%
+    summarise(volume = n()) %>%
+    ungroup()
+  
+  df <- fnGlenday(df_tmp, var.x = 'section', var.y = 'volume')
+  
+  return(df)
+}
+
+# * * * 1.2.8.3. Outputs 3m Section and Metric ----
+fnOutputs3mSectionMetric <- function(df_op){
+  df_tmp <- df_op %>% 
+    dplyr::filter(
+      as.Date(month) >= (dt_current_month %m+% months(-2)) & 
+        as.Date(month) < (dt_current_month %m+% months(1)) &
+        as.Date(month) >= dt_year_start) %>%
+    group_by(section, output) %>%
+    summarise(volume = n(), .groups = 'keep') %>%
+    ungroup()
+  
+  df <- fnGlenday(df_tmp, var.x = 'output', var.y = 'volume')
+  
+  return(df)
+}
+
+# * * * 1.2.8.4. Outputs 12m Section and Metric ----
+fnOutputs12mSectionMetric <- function(df_op){
+  df_tmp <- df_op %>% 
+    dplyr::filter(
+      as.Date(month) >= dt_year_start & 
+        as.Date(month) < (dt_current_month %m+% months(1)) &
+        as.Date(month) < (dt_year_start %m+% months(12))) %>%
+    group_by(section, output) %>%
+    summarise(volume = n(), .groups = 'keep') %>%
+    ungroup()
+  
+  df <- fnGlenday(df_tmp, var.x = 'output', var.y = 'volume')
+  
+  return(df)
+}
+
+# * * 1.2.9. Outcomes Section ----
+
+# * * * 1.2.9.1. Outcomes 3m Section ----
+fnOutcomes3mSection <- function(df_oc){
+  df_tmp <- df_oc %>% 
+    dplyr::filter(
+      as.Date(month) >= (dt_current_month %m+% months(-2)) & 
+        as.Date(month) < (dt_current_month %m+% months(1)) &
+        as.Date(month) >= dt_year_start) %>%
+    group_by(section) %>%
+    summarise(volume = n()) %>%
+    ungroup()
+  
+  df <- fnGlenday(df_tmp, var.x = 'section', var.y = 'volume')
+  
+  return(df)
+}
+
+# * * * 1.2.9.2. Outcomes 12m Section ----
+fnOutcomes12mSection <- function(df_oc){
+  df_tmp <- df_oc %>% 
+    dplyr::filter(
+      as.Date(month) >= dt_year_start & 
+        as.Date(month) < (dt_current_month %m+% months(1)) &
+        as.Date(month) < (dt_year_start %m+% months(12))) %>%
+    group_by(section) %>%
+    summarise(volume = n()) %>%
+    ungroup()
+  
+  df <- fnGlenday(df_tmp, var.x = 'section', var.y = 'volume')
+  
+  return(df)
+}
+
+# * * * 1.2.9.3. Outcomes 3m Section and Metric ----
+fnOutcomes3mSectionMetric <- function(df_oc){
+  df_tmp <- df_oc %>% 
+    dplyr::filter(
+      as.Date(month) >= (dt_current_month %m+% months(-2)) & 
+        as.Date(month) < (dt_current_month %m+% months(1)) &
+        as.Date(month) >= dt_year_start) %>%
+    group_by(section, outcome) %>%
+    summarise(volume = n(), .groups = 'keep') %>%
+    ungroup()
+  
+  df <- fnGlenday(df_tmp, var.x = 'outcome', var.y = 'volume')
+  
+  return(df)
+}
+
+# * * * 1.2.9.4. Outcomes 12m Section and Metric ----
+fnOutcomes12mSectionMetric <- function(df_oc){
+  df_tmp <- df_oc %>% 
+    dplyr::filter(
+      as.Date(month) >= dt_year_start & 
+        as.Date(month) < (dt_current_month %m+% months(1)) &
+        as.Date(month) < (dt_year_start %m+% months(12))) %>%
+    group_by(section, outcome) %>%
+    summarise(volume = n(), .groups = 'keep') %>%
+    ungroup()
+  
+  df <- fnGlenday(df_tmp, var.x = 'outcome', var.y = 'volume')
+  
+  return(df)
+}
+
 
 # 2. Import data ----
 # ═══════════════════
@@ -978,7 +1308,7 @@ ini_file_settings <- read.ini(ini_file)
 
 # Select the caseload tracker sheet from the excel workbook
 caseload_tracker_sheets <- readxl::excel_sheets(path = caseload_tracker_file)
-caseload_tracker_sheets <- svDialogs::dlgList(choices = caseload_tracker_sheets, title = 'Select the CASELOAD TRACKER sheet(s)', multiple = TRUE)$res
+caseload_tracker_sheets <- utils::select.list(title = 'CASELOAD TRACKER sheet(s)', choices = caseload_tracker_sheets, multiple = TRUE, graphics = TRUE)
 
 # * 2.1. Caseload tracker ----
 # ────────────────────────────
@@ -1088,6 +1418,7 @@ df_activity_section <- data.frame(metric = as.character(),
 # New Clients Supported in Period
 df_activity_section <- df_activity_section %>% bind_rows(fnGetNewClientsSupported(df_caseload_tracker))
 
+# RDB ============================================================================ ----
 # Reduction in Activity 3 and 12 Month: ED | EM | AMB 
 # Currently we are awaiting the RDUH BI Team's report to populate the following metrics
 df_tmp <- data.frame(metric = c('Reduction in Activity Starting 3 months from Intervention Start (NHSE Target 40%): ED Attendances',
@@ -1102,6 +1433,8 @@ df_tmp <- data.frame(metric = c('Reduction in Activity Starting 3 months from In
                      q3 = rep(NA, 6),
                      q4 = rep(NA, 6),
                      ytd = rep(NA, 6))
+fnGetActivityData()
+
 df_activity_section <- df_activity_section %>% bind_rows(df_tmp)
 
 # Reduction in People Experiencing Loneliness at End of Support (NHSE Target 66%)
@@ -1147,16 +1480,14 @@ df_kpi_section <- df_kpi_section %>% bind_rows(fnGetExitLoneliness(df_ct = df_ca
 # * 3.4. Data Points Section ----
 # ───────────────────────────────
 
-df_data_points %>% names()
-levels(as.factor(df_data_points$metric))
-
 metric_list <- c('Number of wider beneficiaries', 'Clients who declined',
                  'Case concluded successfully', 'Closed cases due to disengagement',
                  'Closed cases due to death', 'Closed cases (other reasons, ie moving out of area)',
                  'Number of contacts/interventions with clients')
-# Total current open cases*
 
-# Number of contacts interventions with clients
+df_data_point_section <- fnGetDataPoints(df_dp = df_data_points, metric_list = metric_list) %>% 
+  bind_rows(fnGetCaseLoad(df_ct = df_caseload_tracker))
+
 # ────────────────────────────────────────────────────────────────────
 # NOTE: The metrics marked * will be sourced from the caseload tracker
 # ────────────────────────────────────────────────────────────────────
@@ -1164,32 +1495,30 @@ metric_list <- c('Number of wider beneficiaries', 'Clients who declined',
 # * 3.5. Support Provided Section ----
 # ────────────────────────────────────
 
-# TAP conducted
-# Flow meeting with FC and lead professional
-# Number of individual 1:1 interactions
-# Continued ongoing contacts with professionals
-# Caseworker research undertaken to find solutions for clients
-# Caseworker support to access personal health budgets
-# Caseworker support with form filling
-# Caseworker support with IT
-# Caseworker support to meet aspirations
-# Client involved in co-production work
+metric_list <- c('Team Around the Person meeting conducted', 'Flow meeting with FC & Lead Professional',
+             'One-to-one work with clients (per client) number of individual one to one interactions with client',
+             'Continued ongoing contacts with professionals (total number of seperate contacts)',
+             'Caseworker research undertaken to find solutions for clients', 'Caseworker support to access Personal Health Budget',
+             'Caseworker support with Form filling', 'Caseworker support with IT incl. virtual meetings, emails etc',
+             'Caseworker support to meet aspirations', 'Client involved in coproduction work (total number of seperate contacts)')
+
+df_support_provided_section <- fnGetSupportProvided(df_sr = df_support_and_referrals, metric_list = metric_list)
 
 # * 3.6. Outputs Section ----
 # ───────────────────────────
 
-# Previous 3 months - Section
-# Previous 12 months - Section
-# Previous 3 months - Section and Metric - Greens only
-# Previous 12 months - Section and Metric - Greens only
+df_outputs_3m_section <- fnOutputs3mSection(df_outputs)
+df_outputs_12m_section <- fnOutputs12mSection(df_outputs)
+df_outputs_3m_section_metric <- fnOutputs3mSectionMetric(df_outputs)
+df_outputs_12m_section_metric <- fnOutputs12mSectionMetric(df_outputs)
 
 # * 3.7. Outcomes Section ----
 # ────────────────────────────
 
-# Previous 3 months - Section
-# Previous 12 months - Section
-# Previous 3 months - Section and Metric - Greens only
-# Previous 12 months - Section and Metric - Greens only
+df_outcomes_3m_section <- fnOutcomes3mSection(df_outcomes)
+df_outcomes_12m_section <- fnOutcomes12mSection(df_outcomes)
+df_outcomes_3m_section_metric <- fnOutcomes3mSectionMetric(df_outcomes)
+df_outcomes_12m_section_metric <- fnOutcomes12mSectionMetric(df_outcomes)
 
 # * 3.8. Impact Reporting Section ----
 # ────────────────────────────────────
@@ -1198,4 +1527,6 @@ metric_list <- c('Number of wider beneficiaries', 'Clients who declined',
 # Support and Referrals
 # Outputs
 # Outcomes
+
+
 
