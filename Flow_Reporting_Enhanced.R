@@ -13,12 +13,14 @@ caseload_tracker_file <- utils::choose.files(caption = 'Please select the CASELO
 # Select reporting Workbooks
 reporting_workbook_filelist <- utils::choose.files(caption = 'Please select the REPORTING WORKBOOKS to import', multi = TRUE)
 
+library(lubridate)
+
 # Get the start of the reporting year
 year_start <- svDialogs::dlgInput(message = 'Enter Reporting Year Start in YYYY-MM-DD format (e.g. 2024-01-01)', default = '2024-01-01')$res
 dt_year_start <- as.Date(year_start, '%Y-%m-%d')
 
 # Get the current month
-current_month <- format(Sys.Date() - months(1), '%Y-%m-01')
+current_month <- format(Sys.Date() %m+% months(-1), '%Y-%m-01')
 current_month <- svDialogs::dlgInput(message = paste0('Enter Current Month in YYYY-MM-DD format (e.g. ', current_month, ')'), default = current_month)$res
 dt_current_month <- as.Date(current_month, '%Y-%m-%d')
 
@@ -557,6 +559,418 @@ fnGetClientsEndingSupport <- function(df_ct){
 
 # * * * 1.2.4.8. Changes in Activity Section: People Reporting a Positive Experience ----
 
+# * * 1.2.5. KPI Section ----
+
+# * * * 1.2.5.1. KPI Section: 80% of New Clients have an Entry WEMWBS Score ----
+fnGetEntryWEMWBS <- function(df_ct){
+  # Initialise the variables to receive the data
+  curr_month <- as.character(NA)
+  q1 <- as.character(NA)
+  q2 <- as.character(NA)
+  q3 <- as.character(NA)
+  q4 <- as.character(NA)
+  ytd <- as.character(NA)
+  
+  curr_month_denominator <- curr_month_numerator <- NA 
+  q1_denominator <- q1_numerator <- NA
+  q2_denominator <- q2_numerator <- NA
+  q3_denominator <- q3_numerator <- NA
+  q4_denominator <- q4_numerator <- NA
+  ytd_denominator <- ytd_numerator <- NA
+  
+  # Filter the input data frame to the selected cohort
+  
+  # Anyone with a ct_start within the period but without a ct_closure in the exception list in the ini file 
+  # i.e. 'Declined', 'Non-engagement', 'Exempt', 'Incorrect contact details' see ini file [caseload_tracker_exclusions]
+  # section settings for the list of ct_closure exclusions
+  df_tmp <- df_ct %>% dplyr::filter(!(ct_closure %in% unlist(unname(ini_file_settings$caseload_tracker_exclusions))))
+
+  # Trim the data to end at the end of the current month
+  df_tmp <- df_tmp %>% dplyr::filter(ct_start <= dt_current_month + months(1))
+  
+  # Calculate denominator for each period
+  curr_month_denominator <- df_tmp %>% dplyr::filter((ct_start >= dt_current_month) & 
+                                           (ct_start < dt_current_month + months(1))) %>% NROW()
+  if(dt_current_month >= dt_year_start)
+    q1_denominator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start) & 
+                                     (ct_start < dt_year_start + months(3))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(3))
+    q2_denominator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start + months(3)) & 
+                                     (ct_start < dt_year_start + months(6))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(6))
+    q3_denominator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start + months(6)) & 
+                                     (ct_start < dt_year_start + months(9))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(9))
+    q4_denominator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start + months(9)) & 
+                                     (ct_start < dt_year_start + months(12))) %>% NROW()
+  if(dt_current_month >= dt_year_start)
+    ytd_denominator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start) & 
+                                      (ct_start < dt_year_start + months(12))) %>% NROW()
+  # Trim to only valid WEMWBS entries
+  df_tmp <- df_tmp %>% dplyr::filter(!is.na(ct_wemwbs_score_in))
+  
+  # Calculate numerator for each period
+  curr_month_numerator <- df_tmp %>% dplyr::filter((ct_start >= dt_current_month) & 
+                                                       (ct_start < dt_current_month + months(1))) %>% NROW()
+  if(dt_current_month >= dt_year_start)
+    q1_numerator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start) & 
+                                                 (ct_start < dt_year_start + months(3))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(3))
+    q2_numerator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start + months(3)) & 
+                                                 (ct_start < dt_year_start + months(6))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(6))
+    q3_numerator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start + months(6)) & 
+                                                 (ct_start < dt_year_start + months(9))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(9))
+    q4_numerator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start + months(9)) & 
+                                                 (ct_start < dt_year_start + months(12))) %>% NROW()
+  if(dt_current_month >= dt_year_start)
+    ytd_numerator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start) & 
+                                                  (ct_start < dt_year_start + months(12))) %>% NROW()
+  
+  df_tmp <- data.frame(metric = 'Valid Entry WEMWBS',
+                       current_month = sprintf('%.1f%% (%d/%d)', (curr_month_numerator / curr_month_denominator) * 100, curr_month_numerator, curr_month_denominator),
+                       q1 = sprintf('%.1f%% (%d/%d)', (q1_numerator / q1_denominator) * 100, q1_numerator, q1_denominator),
+                       q2 = sprintf('%.1f%% (%d/%d)', (q2_numerator / q2_denominator) * 100, q2_numerator, q2_denominator),
+                       q3 = sprintf('%.1f%% (%d/%d)', (q3_numerator / q3_denominator) * 100, q3_numerator, q3_denominator),
+                       q4 = sprintf('%.1f%% (%d/%d)', (q4_numerator / q4_denominator) * 100, q4_numerator, q4_denominator),
+                       ytd = sprintf('%.1f%% (%d/%d)', (ytd_numerator / ytd_denominator) * 100, ytd_numerator, ytd_denominator))
+  return(df_tmp)
+}
+
+# * * * 1.2.5.2. KPI Section: 80% of Closed Clients have an Exit WEMWBS Score ---- 
+fnGetExitWEMWBS <- function(df_ct){
+  # Initialise the variables to receive the data
+  curr_month <- as.character(NA)
+  q1 <- as.character(NA)
+  q2 <- as.character(NA)
+  q3 <- as.character(NA)
+  q4 <- as.character(NA)
+  ytd <- as.character(NA)
+  
+  curr_month_denominator <- curr_month_numerator <- NA 
+  q1_denominator <- q1_numerator <- NA
+  q2_denominator <- q2_numerator <- NA
+  q3_denominator <- q3_numerator <- NA
+  q4_denominator <- q4_numerator <- NA
+  ytd_denominator <- ytd_numerator <- NA
+  
+  # Filter the input data frame to the selected cohort
+  
+  # Anyone with a ct_start within the period but without a ct_closure in the exception list in the ini file 
+  # i.e. 'Declined', 'Non-engagement', 'Exempt', 'Incorrect contact details' see ini file [caseload_tracker_exclusions]
+  # section settings for the list of ct_closure exclusions
+  df_tmp <- df_ct %>% dplyr::filter(!(ct_closure %in% unlist(unname(ini_file_settings$caseload_tracker_exclusions))))
+  
+  # Trim the data to end at the end of the current month
+  df_tmp <- df_tmp %>% dplyr::filter(ct_start <= dt_current_month + months(1))
+  
+  # Calculate denominator for each period
+  curr_month_denominator <- df_tmp %>% dplyr::filter((ct_end >= dt_current_month) & 
+                                           (ct_end < dt_current_month + months(1))) %>% NROW()
+  if(dt_current_month >= dt_year_start)
+    q1_denominator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start) & 
+                                     (ct_end < dt_year_start + months(3))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(3))
+    q2_denominator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(3)) & 
+                                     (ct_end < dt_year_start + months(6))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(6))
+    q3_denominator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(6)) & 
+                                     (ct_end < dt_year_start + months(9))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(9))
+    q4_denominator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(9)) & 
+                                     (ct_end < dt_year_start + months(12))) %>% NROW()
+  if(dt_current_month >= dt_year_start)
+    ytd_denominator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start) & 
+                                      (ct_end < dt_year_start + months(12))) %>% NROW()
+  # Trim to only valid WEMWBS entries
+  df_tmp <- df_tmp %>% dplyr::filter(!is.na(ct_wemwbs_score_out))
+  
+  # Calculate numerator for each period
+  curr_month_numerator <- df_tmp %>% dplyr::filter((ct_end >= dt_current_month) & 
+                                                       (ct_end < dt_current_month + months(1))) %>% NROW()
+  if(dt_current_month >= dt_year_start)
+    q1_numerator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start) & 
+                                                 (ct_end < dt_year_start + months(3))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(3))
+    q2_numerator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(3)) & 
+                                                 (ct_end < dt_year_start + months(6))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(6))
+    q3_numerator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(6)) & 
+                                                 (ct_end < dt_year_start + months(9))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(9))
+    q4_numerator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(9)) & 
+                                                 (ct_end < dt_year_start + months(12))) %>% NROW()
+  if(dt_current_month >= dt_year_start)
+    ytd_numerator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start) & 
+                                                  (ct_end < dt_year_start + months(12))) %>% NROW()  
+  df_tmp <- data.frame(metric = 'Valid Exit WEMWBS',
+                       current_month = sprintf('%.1f%% (%d/%d)', (curr_month_numerator / curr_month_denominator) * 100, curr_month_numerator, curr_month_denominator),
+                       q1 = sprintf('%.1f%% (%d/%d)', (q1_numerator / q1_denominator) * 100, q1_numerator, q1_denominator),
+                       q2 = sprintf('%.1f%% (%d/%d)', (q2_numerator / q2_denominator) * 100, q2_numerator, q2_denominator),
+                       q3 = sprintf('%.1f%% (%d/%d)', (q3_numerator / q3_denominator) * 100, q3_numerator, q3_denominator),
+                       q4 = sprintf('%.1f%% (%d/%d)', (q4_numerator / q4_denominator) * 100, q4_numerator, q4_denominator),
+                       ytd = sprintf('%.1f%% (%d/%d)', (ytd_numerator / ytd_denominator) * 100, ytd_numerator, ytd_denominator))
+  return(df_tmp)
+}
+
+# * * * 1.2.5.3. KPI Section: 80% of New Clients have a Entry Loneliness Answer (Yes/No) ---- 
+fnGetEntryLoneliness <- function(df_ct){
+  # Initialise the variables to receive the data
+  curr_month <- as.integer(NA)
+  q1 <- as.integer(NA)
+  q2 <- as.integer(NA)
+  q3 <- as.integer(NA)
+  q4 <- as.integer(NA)
+  ytd <- as.integer(NA)
+
+  curr_month_denominator <- curr_month_numerator <- NA 
+  q1_denominator <- q1_numerator <- NA
+  q2_denominator <- q2_numerator <- NA
+  q3_denominator <- q3_numerator <- NA
+  q4_denominator <- q4_numerator <- NA
+  ytd_denominator <- ytd_numerator <- NA
+  
+  # Filter the input data frame to the selected cohort
+  
+  # Anyone with a ct_start within the period but without a ct_closure in the exception list in the ini file 
+  # i.e. 'Declined', 'Non-engagement', 'Exempt', 'Incorrect contact details' see ini file [caseload_tracker_exclusions]
+  # section settings for the list of ct_closure exclusions
+  df_tmp <- df_ct %>% dplyr::filter(!(ct_closure %in% unlist(unname(ini_file_settings$caseload_tracker_exclusions))))
+  
+  # Trim the data to end at the end of the current month
+  df_tmp <- df_tmp %>% dplyr::filter(ct_start <= dt_current_month + months(1))
+  
+  # Calculate denominator for each period
+  curr_month_denominator <- df_tmp %>% dplyr::filter((ct_start >= dt_current_month) & 
+                                                       (ct_start < dt_current_month + months(1))) %>% NROW()
+  if(dt_current_month >= dt_year_start)
+    q1_denominator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start) & 
+                                                 (ct_start < dt_year_start + months(3))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(3))
+    q2_denominator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start + months(3)) & 
+                                                 (ct_start < dt_year_start + months(6))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(6))
+    q3_denominator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start + months(6)) & 
+                                                 (ct_start < dt_year_start + months(9))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(9))
+    q4_denominator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start + months(9)) & 
+                                                 (ct_start < dt_year_start + months(12))) %>% NROW()
+  if(dt_current_month >= dt_year_start)
+    ytd_denominator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start) & 
+                                                  (ct_start < dt_year_start + months(12))) %>% NROW()
+  # Trim to only valid WEMWBS entries
+  df_tmp <- df_tmp %>% dplyr::filter(ct_loneliness_in %in% c('Yes','No'))
+  
+  # Calculate numerator for each period
+  curr_month_numerator <- df_tmp %>% dplyr::filter((ct_start >= dt_current_month) & 
+                                                     (ct_start < dt_current_month + months(1))) %>% NROW()
+  if(dt_current_month >= dt_year_start)
+    q1_numerator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start) & 
+                                               (ct_start < dt_year_start + months(3))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(3))
+    q2_numerator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start + months(3)) & 
+                                               (ct_start < dt_year_start + months(6))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(6))
+    q3_numerator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start + months(6)) & 
+                                               (ct_start < dt_year_start + months(9))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(9))
+    q4_numerator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start + months(9)) & 
+                                               (ct_start < dt_year_start + months(12))) %>% NROW()
+  if(dt_current_month >= dt_year_start)
+    ytd_numerator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start) & 
+                                                (ct_start < dt_year_start + months(12))) %>% NROW()
+  
+  df_tmp <- data.frame(metric = 'Valid Entry Loneliness',
+                       current_month = sprintf('%.1f%% (%d/%d)', (curr_month_numerator / curr_month_denominator) * 100, curr_month_numerator, curr_month_denominator),
+                       q1 = sprintf('%.1f%% (%d/%d)', (q1_numerator / q1_denominator) * 100, q1_numerator, q1_denominator),
+                       q2 = sprintf('%.1f%% (%d/%d)', (q2_numerator / q2_denominator) * 100, q2_numerator, q2_denominator),
+                       q3 = sprintf('%.1f%% (%d/%d)', (q3_numerator / q3_denominator) * 100, q3_numerator, q3_denominator),
+                       q4 = sprintf('%.1f%% (%d/%d)', (q4_numerator / q4_denominator) * 100, q4_numerator, q4_denominator),
+                       ytd = sprintf('%.1f%% (%d/%d)', (ytd_numerator / ytd_denominator) * 100, ytd_numerator, ytd_denominator))
+  return(df_tmp)
+}
+
+# * * * 1.2.5.4. KPI Section: 80% of Closed Clients have a Exit Loneliness Answer (Yes/No) ----
+fnGetExitLoneliness <- function(df_ct){
+  # Initialise the variables to receive the data
+  curr_month <- as.character(NA)
+  q1 <- as.character(NA)
+  q2 <- as.character(NA)
+  q3 <- as.character(NA)
+  q4 <- as.character(NA)
+  ytd <- as.character(NA)
+  
+  curr_month_denominator <- curr_month_numerator <- NA 
+  q1_denominator <- q1_numerator <- NA
+  q2_denominator <- q2_numerator <- NA
+  q3_denominator <- q3_numerator <- NA
+  q4_denominator <- q4_numerator <- NA
+  ytd_denominator <- ytd_numerator <- NA
+  
+  # Filter the input data frame to the selected cohort
+  
+  # Anyone with a ct_start within the period but without a ct_closure in the exception list in the ini file 
+  # i.e. 'Declined', 'Non-engagement', 'Exempt', 'Incorrect contact details' see ini file [caseload_tracker_exclusions]
+  # section settings for the list of ct_closure exclusions
+  df_tmp <- df_ct %>% dplyr::filter(!(ct_closure %in% unlist(unname(ini_file_settings$caseload_tracker_exclusions))))
+  
+  # Trim the data to end at the end of the current month
+  df_tmp <- df_tmp %>% dplyr::filter(ct_start <= dt_current_month + months(1))
+  
+  # Calculate denominator for each period
+  curr_month_denominator <- df_tmp %>% dplyr::filter((ct_end >= dt_current_month) & 
+                                                       (ct_end < dt_current_month + months(1))) %>% NROW()
+  if(dt_current_month >= dt_year_start)
+    q1_denominator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start) & 
+                                                 (ct_end < dt_year_start + months(3))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(3))
+    q2_denominator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(3)) & 
+                                                 (ct_end < dt_year_start + months(6))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(6))
+    q3_denominator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(6)) & 
+                                                 (ct_end < dt_year_start + months(9))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(9))
+    q4_denominator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(9)) & 
+                                                 (ct_end < dt_year_start + months(12))) %>% NROW()
+  if(dt_current_month >= dt_year_start)
+    ytd_denominator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start) & 
+                                                  (ct_end < dt_year_start + months(12))) %>% NROW()
+  # Trim to only valid WEMWBS entries
+  df_tmp <- df_tmp %>% dplyr::filter(!is.na(ct_loneliness_out))
+  
+  # Calculate numerator for each period
+  curr_month_numerator <- df_tmp %>% dplyr::filter((ct_end >= dt_current_month) & 
+                                                     (ct_end < dt_current_month + months(1))) %>% NROW()
+  if(dt_current_month >= dt_year_start)
+    q1_numerator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start) & 
+                                               (ct_end < dt_year_start + months(3))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(3))
+    q2_numerator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(3)) & 
+                                               (ct_end < dt_year_start + months(6))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(6))
+    q3_numerator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(6)) & 
+                                               (ct_end < dt_year_start + months(9))) %>% NROW()
+  if(dt_current_month >= dt_year_start + months(9))
+    q4_numerator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(9)) & 
+                                               (ct_end < dt_year_start + months(12))) %>% NROW()
+  if(dt_current_month >= dt_year_start)
+    ytd_numerator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start) & 
+                                                (ct_end < dt_year_start + months(12))) %>% NROW()  
+  df_tmp <- data.frame(metric = 'Valid Exit Loneliness',
+                       current_month = sprintf('%.1f%% (%d/%d)', (curr_month_numerator / curr_month_denominator) * 100, curr_month_numerator, curr_month_denominator),
+                       q1 = sprintf('%.1f%% (%d/%d)', (q1_numerator / q1_denominator) * 100, q1_numerator, q1_denominator),
+                       q2 = sprintf('%.1f%% (%d/%d)', (q2_numerator / q2_denominator) * 100, q2_numerator, q2_denominator),
+                       q3 = sprintf('%.1f%% (%d/%d)', (q3_numerator / q3_denominator) * 100, q3_numerator, q3_denominator),
+                       q4 = sprintf('%.1f%% (%d/%d)', (q4_numerator / q4_denominator) * 100, q4_numerator, q4_denominator),
+                       ytd = sprintf('%.1f%% (%d/%d)', (ytd_numerator / ytd_denominator) * 100, ytd_numerator, ytd_denominator))
+  return(df_tmp)
+}
+
+# * * 1.2.6. Data Points Section ----
+
+# * * * 1.2.6.1. Data Points Section: Create main table ----
+fnGetDataPoints <- function(df_dp){
+  # Filter the data points to the selected metrics and up to and including the current month
+  df_tmp <- df_dp %>% 
+    dplyr::filter(metric %in% metric_list) %>%
+    dplyr::filter(month <= dt_current_month %m+% months(1)) %>%
+    group_by(month, metric) %>%
+    summarise(value = sum(value, na.rm = TRUE),
+              .groups = 'keep') %>%
+    ungroup()
+  
+  # Create the data points table
+  df <- df_tmp %>% 
+    dplyr::filter(month == dt_current_month) %>%
+    group_by(metric) %>%
+    summarise(current_month = sum(value, na.rm = TRUE)) %>%
+    ungroup() %>%
+    full_join(
+      df_tmp %>% 
+        dplyr::filter(month >= dt_year_start & 
+                        month < dt_year_start %m+% months(3)) %>%
+        group_by(metric) %>%
+        summarise(q1 = sum(value, na.rm = TRUE)) %>%
+        ungroup(),
+      by = 'metric'
+    ) %>%
+    full_join(
+      df_tmp %>% 
+        dplyr::filter(month >= dt_year_start %m+% months(3) & 
+                        month < dt_year_start %m+% months(6)) %>%
+        group_by(metric) %>%
+        summarise(q2 = sum(value, na.rm = TRUE)) %>%
+        ungroup(),
+      by = 'metric'
+    ) %>%
+    full_join(
+      df_tmp %>% 
+        dplyr::filter(month >= dt_year_start %m+% months(6) & 
+                        month < dt_year_start %m+% months(9)) %>%
+        group_by(metric) %>%
+        summarise(q3 = sum(value, na.rm = TRUE)) %>%
+        ungroup(),
+      by = 'metric'
+    ) %>%
+    full_join(
+      df_tmp %>% 
+        dplyr::filter(month >= dt_year_start %m+% months(9) & 
+                        month < dt_year_start %m+% months(12)) %>%
+        group_by(metric) %>%
+        summarise(q4 = sum(value, na.rm = TRUE)) %>%
+        ungroup(),
+      by = 'metric'
+    ) %>%
+    full_join(
+      df_tmp %>% 
+        dplyr::filter(month >= dt_year_start & 
+                        month < dt_year_start %m+% months(12)) %>%
+        group_by(metric) %>%
+        summarise(ytd = sum(value, na.rm = TRUE)) %>%
+        ungroup(),
+      by = 'metric'
+    )
+  
+  # Return the data frame
+  return(df)
+}
+
+# * * * 1.2.6.2. Data Points Section: Get case load ----
+fnGetCaseLoad <- function(df_ct){
+  # Initialise the variables to receive the data
+  curr_month <- as.integer(NA)
+  q1 <- as.integer(NA)
+  q2 <- as.integer(NA)
+  q3 <- as.integer(NA)
+  q4 <- as.integer(NA)
+  ytd <- as.integer(NA)
+
+  # Filter the data to exclude any records starting after end of current month
+  df_tmp <- df_ct %>% dplyr::filter(ct_start < dt_current_month %m+% months(1))
+  
+  # Get any record where the ct_start occurs before end of period and end date occurs 
+  # after the end of the period or is NA (NB: census point data) no exclusions applied to 
+  # this data
+  curr_month <- df_tmp %>% dplyr::filter(ct_start < dt_current_month %m+% months(1) &
+                                           (is.na(ct_end) | ct_end >= dt_current_month %m+% months(1))) %>% NROW()
+    
+  q1 <- df_tmp %>% dplyr::filter(ct_start < dt_year_start %m+% months(3) &
+                                           (is.na(ct_end) | ct_end >= dt_year_start %m+% months(3))) %>% NROW()
+
+  q2 <- df_tmp %>% dplyr::filter(ct_start < dt_year_start %m+% months(6) &
+                                   (is.na(ct_end) | ct_end >= dt_year_start %m+% months(6))) %>% NROW()
+
+  q3 <- df_tmp %>% dplyr::filter(ct_start < dt_year_start %m+% months(9) &
+                                   (is.na(ct_end) | ct_end >= dt_year_start %m+% months(9))) %>% NROW()
+  
+  q4 <- df_tmp %>% dplyr::filter(ct_start < dt_year_start %m+% months(9) &
+                                   (is.na(ct_end) | ct_end >= dt_year_start %m+% months(9))) %>% NROW()
+  
+  ytd <- df_tmp %>% dplyr::filter(ct_start < dt_year_start %m+% months(9) &
+                                   (is.na(ct_end) | ct_end >= dt_year_start %m+% months(9))) %>% NROW()
+  
+}
 
 # 2. Import data ----
 # ═══════════════════
@@ -710,23 +1124,38 @@ df_activity_section <- df_activity_section %>% bind_rows(fnGetClientsEndingSuppo
 # * 3.3. Process KPIs Section ----
 # ────────────────────────────────
 
+df_kpi_section <- data.frame(metric = as.character(),
+                             current_month = as.character(),
+                             q1 = as.character(),
+                             q2 = as.character(),
+                             q3 = as.character(),
+                             q4 = as.character(),
+                             ytd = as.character())
+
 # 80% of New Clients have an Entry WEMWBS Score
+df_kpi_section <- df_kpi_section %>% bind_rows(fnGetEntryWEMWBS(df_ct = df_caseload_tracker))
+
 # 80% of Closed Clients have an Exit WEMWBS Score 
+df_kpi_section <- df_kpi_section %>% bind_rows(fnGetExitWEMWBS(df_ct = df_caseload_tracker))
+
 # 80% of New Clients have a Entry Loneliness Answer (Yes/No) 
+df_kpi_section <- df_kpi_section %>% bind_rows(fnGetEntryLoneliness(df_ct = df_caseload_tracker))
+
 # 80% of Closed Clients have a Exit Loneliness Answer (Yes/No)
-
-
+df_kpi_section <- df_kpi_section %>% bind_rows(fnGetExitLoneliness(df_ct = df_caseload_tracker))
 
 # * 3.4. Data Points Section ----
 # ───────────────────────────────
 
-# Number of wider beneficiaries
-# Clients who declined
+df_data_points %>% names()
+levels(as.factor(df_data_points$metric))
+
+metric_list <- c('Number of wider beneficiaries', 'Clients who declined',
+                 'Case concluded successfully', 'Closed cases due to disengagement',
+                 'Closed cases due to death', 'Closed cases (other reasons, ie moving out of area)',
+                 'Number of contacts/interventions with clients')
 # Total current open cases*
-# Cases concluded successfully
-# Cases closed due to disengagement
-# Cases closed due to death
-# Cases closed - other (moved away etc)
+
 # Number of contacts interventions with clients
 # ────────────────────────────────────────────────────────────────────
 # NOTE: The metrics marked * will be sourced from the caseload tracker

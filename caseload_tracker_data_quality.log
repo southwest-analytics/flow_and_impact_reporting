@@ -1,0 +1,15 @@
+Field, Applicable Entries, Valid Entries
+ct_id,95,95
+ct_gender,95,95
+ct_age,95,95
+ct_loneliness_in,84,31
+ct_loneliness_out,84,2
+ct_postcode,95,86
+ct_status,95,90
+ct_closure,63,59
+ct_start,45,38
+ct_end,63,58
+ct_wemwbs_score_in,50,21
+ct_wemwbs_score_out,27,5
+ct_goals_in,50,22
+ct_goals_out,27,5
