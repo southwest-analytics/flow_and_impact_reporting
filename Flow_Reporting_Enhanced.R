@@ -8,7 +8,7 @@
 ini_file <- utils::choose.files(caption = 'Please select the INI FILE', multi = FALSE)
 
 # Select the project
-project_list <- c('Community Flow' = 2472, 'High Flow' = 2473,
+project_list <- c('One North Devon' = 2472, 'High Flow' = 2473,
                   'Secondary Care' = 2474, 'Primary Care' = 2475,
                   'Community Flow' = 2476)
 project_id <- project_list[utils::select.list(title = 'Select Flow Project', choices = names(project_list), multiple = FALSE, graphics = TRUE)]
@@ -104,11 +104,16 @@ fnImportCaseloadTracker <- function(path, sheets){
     # Read in all bar the first two lines of the sheets (the headers)
     df_tmp <- read_excel(path = path, 
                          sheet = s,
+                         range = cell_cols(ini_file_settings$caseload_tracker_import$range),
                          col_type = 'text', 
-                         col_names = (ini_file_settings$caseload_tracker_import$header==TRUE),
-                         skip = as.integer(ini_file_settings$caseload_tracker_import$skip)
-    ) %>% 
-      # Select the required fields and rename them
+                         col_names = (ini_file_settings$caseload_tracker_import$header==TRUE)
+    )
+    
+    # Skip the header rows
+    df_tmp <- df_tmp[as.integer(ini_file_settings$caseload_tracker_import$skip):NROW(df_tmp),]
+    
+    # Select the required fields and rename them
+    df_tmp <- df_tmp %>%  
       select(all_of(caseload_tracker_field_numbers)) %>%
       rename_with(.fn = ~caseload_tracker_field_names) %>%
       # Ignore any rows that don't have an ID
@@ -1640,7 +1645,7 @@ df_outcomes_12m_section_metric <- fnOutcomes12mSectionMetric(df_outcomes)
 # * 3.8. Write data object ----
 # ─────────────────────────────
 
-save(list = c('dt_year_start', 'dt_current_month',
+save(list = c('dt_year_start', 'dt_current_month', 'project_id',
               'df_headline_section', 'df_activity_section', 'df_activity_section_em_ed_amb',
               'df_kpi_section', 'df_data_point_section', 'df_support_provided_section', 
               'df_outputs_3m_section', 'df_outputs_12m_section', 'df_outputs_3m_section_metric', 
