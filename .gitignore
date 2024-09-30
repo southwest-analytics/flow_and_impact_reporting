@@ -34,3 +34,7 @@ po/*~
 # RStudio Connect folder
 rsconnect/
 uploads.csv
+Flow_Report.docx
+caseload_tracker_data_quality.log
+data_objects.RObj
+errors.csv
