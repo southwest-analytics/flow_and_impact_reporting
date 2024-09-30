@@ -1,0 +1,336 @@
+---
+title: "Flow Reporting"
+author: "Author"
+output: officedown::rdocx_document
+---
+
+```{r setup, include=FALSE}
+# ══════════════════════
+# Initialisation section
+# ══════════════════════
+knitr::opts_chunk$set(echo = TRUE)
+
+# Load Libraries
+# ──────────────
+library(tidyverse)
+library(readxl)
+library(ini)
+library(flextable)
+library(officer)
+library(officedown)
+library(conflicted)
+
+# Load Functions and Globals
+# ──────────────────────────
+
+# Flextable borders
+std_border <- fp_border(color = "gray")
+
+
+# Glenday Palette
+palGlenday <- scales::col_factor(
+  palette = c('Green' = 'darkgreen', 'Yellow' = 'gold', 'Blue' = 'royalblue', 'Red' = 'red3'),
+  levels = c('Green', 'Yellow', 'Blue', 'Red'))
+
+# Load the data file
+load('data_objects.RObj')
+```
+
+## Headlines
+
+```{r RPT_01_headlines, echo = FALSE}
+tbl <- flextable(df_headline_section) %>%
+  set_header_labels(
+    metric = 'Metric',
+    current_month = format(dt_current_month, '%b-%y'),
+    q1 = 'Q1',
+    q2 = 'Q2',
+    q3 = 'Q3',
+    q4 = 'Q4',
+    ytd = 'YTD') %>%
+  set_table_properties(layout = "autofit", width = .9) %>%
+  hline(part = "body", border = std_border) %>%
+  vline(part = "all", border = std_border) %>%
+  bold(bold = TRUE, part = "header")
+tbl
+block_section(prop_section(page_size = page_size(orient = 'portrait')))
+```
+
+## Changes in Activity
+
+```{r RPT_02_changes_in_activity, echo = FALSE}
+tbl <- flextable(df_activity_section) %>%
+  set_header_labels(
+    metric = 'Metric',
+    current_month = format(dt_current_month, '%b-%y'),
+    q1 = 'Q1',
+    q2 = 'Q2',
+    q3 = 'Q3',
+    q4 = 'Q4',
+    ytd = 'YTD') %>%
+  set_table_properties(layout = "autofit", width = .9) %>%
+  hline(part = "body", border = std_border) %>%
+  vline(part = "all", border = std_border) %>%
+  bold(bold = TRUE, part = "header")
+tbl
+block_section(prop_section(page_size = page_size(orient = 'portrait')))
+```
+
+## Changes in Activity
+
+```{r RPT_02a_changes_in_activity, echo = FALSE}
+tbl <- flextable(df_activity_section_em_ed_amb) %>%
+  set_header_labels(
+    metric = 'Metric',
+    current_month = format(dt_current_month, '%b-%y'),
+    q1 = 'Q1',
+    q2 = 'Q2',
+    q3 = 'Q3',
+    q4 = 'Q4',
+    ytd = 'YTD') %>%
+  set_table_properties(layout = "autofit", width = .9) %>%
+  hline(part = "body", border = std_border) %>%
+  vline(part = "all", border = std_border) %>%
+  bold(bold = TRUE, part = "header")
+tbl
+block_section(prop_section(page_size = page_size(orient = 'portrait')))
+```
+
+## Process KPIs
+
+```{r RPT_03_process_kpis, echo = FALSE}
+tbl <- flextable(df_kpi_section) %>%
+  set_header_labels(
+    metric = 'Metric',
+    current_month = format(dt_current_month, '%b-%y'),
+    q1 = 'Q1',
+    q2 = 'Q2',
+    q3 = 'Q3',
+    q4 = 'Q4',
+    ytd = 'YTD') %>%
+  set_table_properties(layout = "autofit", width = .9) %>%
+  hline(part = "body", border = std_border) %>%
+  vline(part = "all", border = std_border) %>%
+  bold(bold = TRUE, part = "header")
+tbl
+block_section(prop_section(page_size = page_size(orient = 'portrait')))
+```
+
+## Data Points
+
+```{r RPT_04_data_points, echo = FALSE}
+tbl <- flextable(df_data_point_section) %>%
+  set_header_labels(
+    metric = 'Metric',
+    current_month = format(dt_current_month, '%b-%y'),
+    q1 = 'Q1',
+    q2 = 'Q2',
+    q3 = 'Q3',
+    q4 = 'Q4',
+    ytd = 'YTD') %>%
+  set_table_properties(layout = "autofit", width = .9) %>%
+  hline(part = "body", border = std_border) %>%
+  vline(part = "all", border = std_border) %>%
+  bold(bold = TRUE, part = "header")
+tbl
+block_section(prop_section(page_size = page_size(orient = 'portrait')))
+```
+
+## Support Provided
+
+```{r RPT_05_support_provided, echo = FALSE}
+tbl <- flextable(df_support_provided_section) %>%
+  set_header_labels(
+    metric = 'Metric',
+    current_month = format(dt_current_month, '%b-%y'),
+    q1 = 'Q1',
+    q2 = 'Q2',
+    q3 = 'Q3',
+    q4 = 'Q4',
+    ytd = 'YTD') %>%
+  set_table_properties(layout = "autofit", width = .9) %>%
+  hline(part = "body", border = std_border) %>%
+  vline(part = "all", border = std_border) %>%
+  bold(bold = TRUE, part = "header")
+tbl
+block_section(prop_section(type = 'continuous'))
+```
+
+## Outputs: Sections - Previous 3 months
+
+```{r RPT_06_outputs_sections_prev_3m, echo = FALSE, fig.asp = 0.8, fig.width = 7, out.width = "100%"}
+txt_period_start_prev_3m <- if(dt_current_month - months(2) < dt_year_start){
+  format(dt_year_start, '%b-%y')
+} else {
+  format(dt_current_month - months(2), '%b-%y')
+}
+txt_period_end_prev_3m <- format(dt_current_month, '%b-%y')
+
+plt <- ggplot(data = df_outcomes_3m_section) %+%
+  theme_bw(base_size = 10) %+%
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) %+%
+  labs(title = paste0('Glenday Sieve Plot for Output Sections for the Previous 3 Months\n',
+                      txt_period_start_prev_3m, ' to ', txt_period_end_prev_3m),
+       x = 'Output Section', y = 'Number of Outputs') %+%
+  guides(fill = guide_legend(title = 'Glenday Sieve')) %+%
+  geom_bar(aes(x = forcats::fct_reorder(str_wrap(section, 20), -volume), y = volume, fill = glenday), stat = 'identity') %+%
+  scale_fill_manual(values = c('Green' = 'darkgreen',
+                               'Yellow' = 'gold',
+                               'Blue' = 'royalblue',
+                                'Red' = 'red3'),
+                     breaks = c('Green','Yellow','Blue','Red'))
+plt
+block_section(prop_section(page_size = page_size(orient = 'landscape')))
+```
+
+## Outputs: Sections - Year to Date
+
+```{r RPT_07_outputs_sections_ytd, echo = FALSE, fig.asp = 0.8, fig.width = 7, out.width = "100%"}
+txt_period_start_ytd <- format(dt_year_start, '%b-%y')
+txt_period_end_ytd <- format(dt_current_month, '%b-%y')
+
+plt <- ggplot(data = df_outputs_12m_section) %+%
+  theme_bw(base_size = 10) %+%
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) %+%
+  labs(title = paste0('Glenday Sieve Plot for Output Sections for the Year to Date\n',
+                      txt_period_start_ytd, ' to ', txt_period_end_ytd),
+       x = 'Output Section', y = 'Number of Outputs') %+%
+  guides(fill = guide_legend(title = 'Glenday Sieve')) %+%
+  geom_bar(aes(x = forcats::fct_reorder(str_wrap(section, 20), -volume), y = volume, fill = glenday), stat = 'identity') %+%
+  scale_fill_manual(values = c('Green' = 'darkgreen',
+                               'Yellow' = 'gold',
+                               'Blue' = 'royalblue',
+                                'Red' = 'red3'),
+                     breaks = c('Green','Yellow','Blue','Red'))
+plt
+block_section(prop_section(page_size = page_size(orient = 'landscape')))
+```
+
+## Outputs: Sections and Outputs - Previous 3 months
+
+```{r RPT_08_outputs_sections_and_outputs_prev_3m, echo = FALSE, fig.asp = 0.8, fig.width = 7, out.width = "100%"}
+plt <- ggplot(data = df_outputs_3m_section_metric %>% dplyr::filter(glenday=='Green')) %+%
+  theme_bw(base_size = 10) %+%
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 8)) %+%
+  labs(title = paste0('Glenday Sieve Plot (Green only) for Outputs for the Previous 3 Months\n',
+                      txt_period_start_prev_3m, ' to ', txt_period_end_prev_3m),
+       x = 'Output', y = 'Number of Outputs') %+%
+  guides(fill = guide_legend(title = 'Glenday Sieve')) %+%
+  geom_bar(aes(x = forcats::fct_reorder(str_wrap(output, 30), -volume), y = volume, fill = glenday), stat = 'identity') %+%
+  scale_fill_manual(values = c('Green' = 'darkgreen',
+                               'Yellow' = 'gold',
+                               'Blue' = 'royalblue',
+                                'Red' = 'red3'),
+                     breaks = c('Green','Yellow','Blue','Red'))
+plt
+block_section(prop_section(page_size = page_size(orient = 'landscape')))
+```
+
+## Outputs: Sections and Outputs - Year to Date
+
+```{r RPT_09_outputs_sections_and_outputs_ytd, echo = FALSE, fig.asp = 0.8, fig.width = 7, out.width = "100%"}
+plt <- ggplot(data = df_outputs_12m_section_metric %>% dplyr::filter(glenday=='Green')) %+%
+  theme_bw(base_size = 10) %+%
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 8)) %+%
+  labs(title = paste0('Glenday Sieve Plot (Green only) for Outputs for the Year to Date\n',
+                      txt_period_start_ytd, ' to ', txt_period_end_ytd),
+       x = 'Output', y = 'Number of Outputs') %+%
+  guides(fill = guide_legend(title = 'Glenday Sieve')) %+%
+  geom_bar(aes(x = forcats::fct_reorder(str_wrap(output, 30), -volume), y = volume, fill = glenday), stat = 'identity') %+%
+  scale_fill_manual(values = c('Green' = 'darkgreen',
+                               'Yellow' = 'gold',
+                               'Blue' = 'royalblue',
+                                'Red' = 'red3'),
+                     breaks = c('Green','Yellow','Blue','Red'))
+plt
+block_section(prop_section(page_size = page_size(orient = 'landscape')))
+```
+
+## Outcomes: Sections - Previous 3 months
+
+```{r RPT_10_outcomes_sections_prev_3m, echo = FALSE, fig.asp = 0.8, fig.width = 7, out.width = "100%"}
+plt <- ggplot(data = df_outcomes_3m_section) %+%
+  theme_bw(base_size = 10) %+%
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) %+%
+  labs(title = paste0('Glenday Sieve Plot for Outcome Sections for the Previous 3 Months\n',
+                      txt_period_start_prev_3m, ' to ', txt_period_end_prev_3m),
+       x = 'Outcome Section', y = 'Number of Outcomes') %+%
+  guides(fill = guide_legend(title = 'Glenday Sieve')) %+%
+  geom_bar(aes(x = forcats::fct_reorder(str_wrap(section, 20), -volume), y = volume, fill = glenday), stat = 'identity') %+%
+  scale_fill_manual(values = c('Green' = 'darkgreen',
+                               'Yellow' = 'gold',
+                               'Blue' = 'royalblue',
+                                'Red' = 'red3'),
+                     breaks = c('Green','Yellow','Blue','Red'))
+plt
+block_section(prop_section(page_size = page_size(orient = 'landscape')))
+```
+
+## Outcomes: Sections - Year to Date
+
+```{r RPT_11_outcomes_sections_ytd, echo = FALSE, fig.asp = 0.8, fig.width = 7, out.width = "100%"}
+plt <- ggplot(data = df_outcomes_12m_section) %+%
+  theme_bw(base_size = 10) %+%
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) %+%
+  labs(title = paste0('Glenday Sieve Plot for Outcome Sections for the Year to Date\n',
+                      txt_period_start_prev_3m, ' to ', txt_period_end_prev_3m),
+       x = 'Outcome Section', y = 'Number of Outcomes') %+%
+  guides(fill = guide_legend(title = 'Glenday Sieve')) %+%
+  geom_bar(aes(x = forcats::fct_reorder(str_wrap(section, 20), -volume), y = volume, fill = glenday), stat = 'identity') %+%
+  scale_fill_manual(values = c('Green' = 'darkgreen',
+                               'Yellow' = 'gold',
+                               'Blue' = 'royalblue',
+                                'Red' = 'red3'),
+                     breaks = c('Green','Yellow','Blue','Red'))
+plt
+block_section(prop_section(page_size = page_size(orient = 'landscape')))
+```
+
+## Outcomes: Sections and Outcomes - Previous 3 months
+
+```{r RPT_12_outcomes_sections_and_outcomes_prev_3m, echo = FALSE, fig.asp = 0.8, fig.width = 7, out.width = "100%"}
+plt <- ggplot(data = df_outcomes_3m_section_metric %>% dplyr::filter(glenday=='Green')) %+%
+  theme_bw(base_size = 10) %+%
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 8)) %+%
+  labs(title = paste0('Glenday Sieve Plot (Green only) for Outcomes for the Previous 3 Months\n',
+                      txt_period_start_prev_3m, ' to ', txt_period_end_prev_3m),
+       x = 'Outcome', y = 'Number of Outcomes') %+%
+  guides(fill = guide_legend(title = 'Glenday Sieve')) %+%
+  geom_bar(aes(x = forcats::fct_reorder(str_wrap(outcome, 30), -volume), y = volume, fill = glenday), stat = 'identity') %+%
+  scale_fill_manual(values = c('Green' = 'darkgreen',
+                               'Yellow' = 'gold',
+                               'Blue' = 'royalblue',
+                                'Red' = 'red3'),
+                     breaks = c('Green','Yellow','Blue','Red'))
+plt
+block_section(prop_section(page_size = page_size(orient = 'landscape')))
+```
+
+## Outcomes: Sections and Outcomes - Year to Date
+
+```{r RPT_13_outcomes_sections_and_outcomes_ytd, echo = FALSE, fig.asp = 0.8, fig.width = 7, out.width = "100%"}
+plt <- ggplot(data = df_outcomes_12m_section_metric %>% dplyr::filter(glenday=='Green')) %+%
+  theme_bw(base_size = 10) %+%
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 8)) %+%
+  labs(title = paste0('Glenday Sieve Plot (Green only) for Outcomes for the Year to Date\n',
+                      txt_period_start_prev_3m, ' to ', txt_period_end_prev_3m),
+       x = 'Outcome', y = 'Number of Outcomes') %+%
+  guides(fill = guide_legend(title = 'Glenday Sieve')) %+%
+  geom_bar(aes(x = forcats::fct_reorder(str_wrap(outcome, 30), -volume), y = volume, fill = glenday), stat = 'identity') %+%
+  scale_fill_manual(values = c('Green' = 'darkgreen',
+                               'Yellow' = 'gold',
+                               'Blue' = 'royalblue',
+                                'Red' = 'red3'),
+                     breaks = c('Green','Yellow','Blue','Red'))
+plt
+block_section(prop_section(page_size = page_size(orient = 'landscape')))
+```
+

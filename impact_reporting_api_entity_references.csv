@@ -1,0 +1,185 @@
+id,name,classification_name,classification_value,reporting_workbook_sheet,section,metric
+9071,Physical Health - New Connection,Physical Health Service Connected to,"Statutory Health Service (inc OT, physiotherapy etc)",Lookups_Outputs,Physical Health (including Self Care),"New connections to statutory health services (including OT, physiotherapy etc)"
+9071,Physical Health - New Connection,Physical Health Service Connected to,Community Nursing Team,Lookups_Outputs,Physical Health (including Self Care),New connections/referrals to Community Nursing Team
+9071,Physical Health - New Connection,Physical Health Service Connected to,GP regarding health concerns,Lookups_Outputs,Physical Health (including Self Care),New connection to GP regarding health concerns
+9071,Physical Health - New Connection,Physical Health Service Connected to,Dentist,Lookups_Outputs,Physical Health (including Self Care),New connections to dentist
+9071,Physical Health - New Connection,Physical Health Service Connected to,Regarding hearing /eyesight concerns,Lookups_Outputs,Physical Health (including Self Care),New connections regarding hearing/eyesight concerns
+9071,Physical Health - New Connection,Physical Health Service Connected to,Drug/Alcohol Support Services,Lookups_Outputs,Physical Health (including Self Care),New connections to drug/alcohol support services
+9071,Physical Health - New Connection,Physical Health Service Connected to,Health/Active lifestyle groups,Lookups_Outputs,Physical Health (including Self Care),New connections/referrals to Healthy/Active lifestyle groups
+9071,Physical Health - New Connection,Physical Health Service Connected to,Living options/mobility support services,Lookups_Outputs,Physical Health (including Self Care),New connections/referrals to Living Options/Mobility Support Service
+9071,Physical Health - New Connection,Physical Health Service Connected to,VCSE support,Lookups_Outputs,Physical Health (including Self Care),New connections/referrals to VCSE support
+9071,Physical Health - New Connection,Physical Health Service Connected to,Other,,,
+9072,Mental Health - New Connection,Mental Health - Service Connected to,Care Co-ordinator or advice (DPT),Lookups_Outputs,Mental Health / Emotional Wellbeing,New connections/referrals to Care Co-ordinator or advice (DPT)
+9072,Mental Health - New Connection,Mental Health - Service Connected to,DPT Discharge Facilitator,Lookups_Outputs,Mental Health / Emotional Wellbeing,New connections/referrals to DPT Discharge Facilitator
+9072,Mental Health - New Connection,Mental Health - Service Connected to,GP Regarding mental wellbeing concerns,Lookups_Outputs,Mental Health / Emotional Wellbeing,New Connections to GP regarding mental wellbeing concerns
+9072,Mental Health - New Connection,Mental Health - Service Connected to,Community Mental Health Team (statutory),Lookups_Outputs,Mental Health / Emotional Wellbeing,New connections/referrals to Community Mental Health Team (statutory)
+9072,Mental Health - New Connection,Mental Health - Service Connected to,VCSE mental health services /wellbeing support groups,Lookups_Outputs,Mental Health / Emotional Wellbeing,New connections/referrals to VCSE mental health services /wellbeing support groups
+9072,Mental Health - New Connection,Mental Health - Service Connected to,Befriending Services (eg Age UK and Macmillan etc),Lookups_Outputs,Mental Health / Emotional Wellbeing,New connections/referrals to Befriending Services (eg Age UK and Macmillan etc)
+9072,Mental Health - New Connection,Mental Health - Service Connected to,Other,,,
+9073,Physical Health - Caseworker Support,Physical - case worker support with,appropriately engage with GP - connection made regarding health concerns,Lookups_Outputs,Physical Health (including Self Care),Caseworker support to appropriately engage with GP
+9073,Physical Health - Caseworker Support,Physical - case worker support with,attend medical appointments (physical health),Lookups_Outputs,Physical Health (including Self Care),Caseworker support to attend medical appointments (all physical health - including dentist/opticians)
+9073,Physical Health - Caseworker Support,Physical - case worker support with,attend dentist/opticians,,,
+9073,Physical Health - Caseworker Support,Physical - case worker support with,access support groups for health conditions eg stroke group,Lookups_Outputs,Physical Health (including Self Care),Caseworker support to access support groups (for health conditions eg stroke group)
+9073,Physical Health - Caseworker Support,Physical - case worker support with,access drug and alcohol services,Lookups_Outputs,Physical Health (including Self Care),Caseworker support to access drug and alcohol services
+9073,Physical Health - Caseworker Support,Physical - case worker support with,"appropriately engage with emergency services, including A&E (likely reduced contact)",Lookups_Outputs,Physical Health (including Self Care),"Caseworker support to appropriately engage with emergency services, including A&E"
+9073,Physical Health - Caseworker Support,Physical - case worker support with,source new clothing,Lookups_Outputs,Physical Health (including Self Care),Caseworker support to source new clothing
+9073,Physical Health - Caseworker Support,Physical - case worker support with,develop personal care skills,Lookups_Outputs,Physical Health (including Self Care),Caseworker support to develop personal care skills
+9073,Physical Health - Caseworker Support,Physical - case worker support with,access external health assessement,Lookups_Outputs,Physical Health (including Self Care),Caseworker support to access external health assessment
+9073,Physical Health - Caseworker Support,Physical - case worker support with,other,,,
+9074,Mental Health - Caseworker support with,Mental - Caseworker support with,attend/access medical appointments (mental health),Lookups_Outputs,Mental Health / Emotional Wellbeing,Caseworker support to attend/access medical appointments (mental health)
+9074,Mental Health - Caseworker support with,Mental - Caseworker support with,contact/attend counselling/Talkworks or similar,Lookups_Outputs,Mental Health / Emotional Wellbeing,Caseworker support to contact/attend counselling/Talkworks or similar
+9074,Mental Health - Caseworker support with,Mental - Caseworker support with,to access support groups (MH),Lookups_Outputs,Mental Health / Emotional Wellbeing,Caseworker supported to access support groups (MH)
+9074,Mental Health - Caseworker support with,Mental - Caseworker support with,other,,,
+9077,Physical Health - Improved,Physical Health Improvement Outcomes,Improved physical health (weight) (Row 55 - 60 not broken down),Lookups_Outcomes,Physical Health (including Self Care),Improved physical health (weight)
+9077,Physical Health - Improved,Physical Health Improvement Outcomes,Improved physical health (smoking cessation),Lookups_Outcomes,Physical Health (including Self Care),Improved physical health (smoking cessation)
+9077,Physical Health - Improved,Physical Health Improvement Outcomes,Improved physical health (reduction in alcohol),Lookups_Outcomes,Physical Health (including Self Care),Improved physical health (reduction in alcohol)
+9077,Physical Health - Improved,Physical Health Improvement Outcomes,Improved physical health (reduction in drug use),Lookups_Outcomes,Physical Health (including Self Care),Improved physical health (reduction in drug use)
+9077,Physical Health - Improved,Physical Health Improvement Outcomes,Impact of hearing deterioration or loss reduced,Lookups_Outcomes,Physical Health (including Self Care),Impact of hearing deterioration or loss reduced
+9077,Physical Health - Improved,Physical Health Improvement Outcomes,Impact of sight deterioration or loss improved,Lookups_Outcomes,Physical Health (including Self Care),Impact of sight deterioration or loss improved
+9077,Physical Health - Improved,Physical Health Improvement Outcomes,Improved personal hygiene (including infection control) -,Lookups_Outcomes,Physical Health (including Self Care),Improved personal hygiene (including infection control)
+9077,Physical Health - Improved,Physical Health Improvement Outcomes,Better engagement with health services (physical health),Lookups_Outcomes,Physical Health (including Self Care),Better engagement with health services (physical health)
+9078,Mental Health - Improved,Mental Health Improvement Outcomes,Improved meaningful activities,Lookups_Outcomes,Mental Health / Emotional Wellbeing,Improved meaningful activities
+9078,Mental Health - Improved,Mental Health Improvement Outcomes,Improved mental health,Lookups_Outcomes,Mental Health / Emotional Wellbeing,Improved mental health (WEMWBS score improved)
+9078,Mental Health - Improved,Mental Health Improvement Outcomes,Reduced incidences of self harm,Lookups_Outcomes,Mental Health / Emotional Wellbeing,Reduced incidences of self harm
+9078,Mental Health - Improved,Mental Health Improvement Outcomes,Client reports feeling more positve/improved motivation,Lookups_Outcomes,Mental Health / Emotional Wellbeing,Client reports feeling more positive/improved motivation
+9078,Mental Health - Improved,Mental Health Improvement Outcomes,Client reports feeling more in control of everyday life,Lookups_Outcomes,Mental Health / Emotional Wellbeing,Client reports feeling more in control of everyday life
+9079,Physical Health - Improved ongoing management of condition,NULL,NULL,Lookups_Outcomes,Physical Health (including Self Care),Better management of ongoing health condition
+9086,Number of patients,NULL,NULL,,,
+9101,Number of new clients referred,NULL,NULL,Lookups_Data_Points,Data Points,Number of new clients referred
+9102,Number of wider beneficiaries,NULL,NULL,Lookups_Data_Points,Data Points,Number of wider beneficiaries
+9103,Total Number of people supported for the month (inc. dependents & co-dependents),NULL,NULL,Lookups_Data_Points,Data Points,Total number of people supported for month
+9104,Number of clients who declined,NULL,NULL,Lookups_Data_Points,Data Points,Clients who declined
+9105,Total current open cases,NULL,NULL,Lookups_Data_Points,Data Points,Total current open cases
+9106,Cases concluded,Reason for case closure,Succesful,Lookups_Data_Points,Data Points,Case concluded successfully
+9106,Cases concluded,Reason for case closure,Disengagement,Lookups_Data_Points,Data Points,Closed cases due to disengagement
+9106,Cases concluded,Reason for case closure,Death,Lookups_Data_Points,Data Points,Closed cases due to death
+9106,Cases concluded,Reason for case closure,Other,Lookups_Data_Points,Data Points,"Closed cases (other reasons, ie moving out of area)"
+9107,Client feedback with OND completed,NULL,NULL,Lookups_Data_Points,Data Points,Client feedback with OND completed
+9108,Referrer Satisfaction Forms received,NULL,NULL,Lookups_Data_Points,Data Points,Referrer satisfaction forms received
+9109,Number of contacts/interventions with clients,NULL,NULL,Lookups_Data_Points,Data Points,Number of contacts/interventions with clients
+9110,Team Around the Person meeting conducted,NULL,NULL,Lookups_Support_Section,Support Provided,Team Around the Person meeting conducted
+9111,Community Around the Person meeting conducted,NULL,NULL,Lookups_Support_Section,Support Provided,Community Around the Person meeting conducted
+9112,Flow meeting with FC & Lead Professional,NULL,NULL,Lookups_Support_Section,Support Provided,Flow meeting with FC & Lead Professional
+9113,One-to-one work with clients (per client) number of individual one to one interactions with client,NULL,NULL,Lookups_Support_Section,Support Provided,One-to-one work with clients (per client) number of individual one to one interactions with client
+9114,Complex Needs Assessment completed,NULL,NULL,,,
+9115,Continued ongoing contacts with professionals (total number of seperate contacts),NULL,NULL,Lookups_Support_Section,Support Provided,Continued ongoing contacts with professionals (total number of seperate contacts)
+9116,Caseworker research undertaken to find solutions for clients,NULL,NULL,Lookups_Support_Section,Support Provided,Caseworker research undertaken to find solutions for clients
+9117,Caseworker Support,NULL,NULL,Lookups_Support_Section,Support Provided,Caseworker support to access Personal Health Budget
+9117,Caseworker Support,NULL,NULL,Lookups_Support_Section,Support Provided,Caseworker support with Form filling
+9117,Caseworker Support,NULL,NULL,Lookups_Support_Section,Support Provided,"Caseworker support with IT incl. virtual meetings, emails etc"
+9117,Caseworker Support,NULL,NULL,Lookups_Support_Section,Support Provided,Caseworker support to meet aspirations
+9118,Successful Court Action,NULL,NULL,Lookups_Support_Section,Support Provided,Successful court action
+9119,Client represented in court,NULL,NULL,Lookups_Support_Section,Support Provided,Client represented in court
+9121,Reduced Demand,Reduced Demand Reasons,Reduced demand on GP (% reduction),,,
+9121,Reduced Demand,Reduced Demand Reasons,Reduced demand on Police (% reduction),,,
+9121,Reduced Demand,Reduced Demand Reasons,Reduced demand on ED (% reduction),,,
+9121,Reduced Demand,Reduced Demand Reasons,Reduced demand on SWAST (% reduction),,,
+9121,Reduced Demand,Reduced Demand Reasons,Reduced demand on Mental Health Services (% reduction),,,
+9121,Reduced Demand,Reduced Demand Reasons,Reduced demand on Adult Social Care (package of care reduced or likely avoided),,,
+9122,Hospital discharge expediated,NULL,NULL,,,
+9123,Number of times our input contributed to a safer/more holistic discharge,NULL,NULL,,,
+9124,Number of times our intervention reduced a likely crisis readmission during support period,NULL,NULL,,,
+9127,Housing and Accommodation New Connections,Housing and Accommodation New connection options,New connections/referrals to Hoarding/normal cleaning service,Lookups_Outputs,Housing / Accommodation,New connections/referrals to Hoarding/normal cleaning service
+9127,Housing and Accommodation New Connections,Housing and Accommodation New connection options,"New connections/referrals to Social Services Adult Team (only totals, not categorized)",Lookups_Outputs,Housing / Accommodation,New connections/referrals to Social Services Adult Team
+9127,Housing and Accommodation New Connections,Housing and Accommodation New connection options,New connections/referrals to Legal Advice,Lookups_Outputs,Housing / Accommodation,New connections/referrals to Legal Advice
+9127,Housing and Accommodation New Connections,Housing and Accommodation New connection options,New connections/referrals to Fire Home Safety Services,Lookups_Outputs,Housing / Accommodation,New connections/referrals to Fire Home Safety Services
+9127,Housing and Accommodation New Connections,Housing and Accommodation New connection options,new connections/referrals to General Home Safety Services (not by Fire Service),Lookups_Outputs,Housing / Accommodation,new connections/referrals to General Home Safety Services (not by Fire Service)
+9127,Housing and Accommodation New Connections,Housing and Accommodation New connection options,New connections/referrals to charitiable support/VCSE,Lookups_Outputs,Housing / Accommodation,New connections/referrals to charitable support/VCSE
+9127,Housing and Accommodation New Connections,Housing and Accommodation New connection options,New connections/referrals to Housing Services,Lookups_Outputs,Housing / Accommodation,New connections/referrals to Housing Services
+9128,Housing / Accomodation Caseworker Support,NULL,NULL,Lookups_Outputs,Housing / Accommodation,Caseworker support to remain in property
+9128,Housing / Accomodation Caseworker Support,NULL,NULL,Lookups_Outputs,Housing / Accommodation,Caseworker support to access housing advice
+9128,Housing / Accomodation Caseworker Support,NULL,NULL,Lookups_Outputs,Housing / Accommodation,Caseworker support to manage tenancy/licence
+9128,Housing / Accomodation Caseworker Support,NULL,NULL,Lookups_Outputs,Housing / Accommodation,Caseworker support to find alternative housing
+9128,Housing / Accomodation Caseworker Support,NULL,NULL,Lookups_Outputs,Housing / Accommodation,Caseworker supported into accommodation
+9129,Housing and Accommodation Caseworker Safety Plans completed,NULL,NULL,Lookups_Outputs,Housing / Accommodation,Caseworker Safety Plan completed
+9130,Housing and Accommodation - Improved living Conditions,NULL,NULL,Lookups_Outcomes,Housing / Accommodation,Improved living conditions (excess cold)
+9130,Housing and Accommodation - Improved living Conditions,NULL,NULL,Lookups_Outcomes,Housing / Accommodation,Improved living conditions (damp)
+9130,Housing and Accommodation - Improved living Conditions,NULL,NULL,Lookups_Outcomes,Housing / Accommodation,"Improved living conditions (noise, security, falls, utilities, pests, hygiene, fire, overcrowding etc)"
+9131,Housing and Accommodation - Evictions Avoided,NULL,NULL,Lookups_Outcomes,Housing / Accommodation,Eviction averted
+9132,Housing and Accommodation - Avoided becoming homeless,NULL,NULL,Lookups_Outcomes,Housing / Accommodation,Avoided becoming homeless
+9133,Housing and Accommodation - Housing Secured,NULL,NULL,Lookups_Outcomes,Housing / Accommodation,Alternative housing secured
+9134,"Meals, diet and nutrition - New Connections",NULL,NULL,Lookups_Outputs,"Meals, Diet and Nutrition",New connections/referrals to VCSE support
+9134,"Meals, diet and nutrition - New Connections",NULL,NULL,Lookups_Outputs,"Meals, Diet and Nutrition",New connections/referrals to Social Services Adult Team
+9134,"Meals, diet and nutrition - New Connections",NULL,NULL,Lookups_Outputs,"Meals, Diet and Nutrition",New connections/referrals to other ongoing shopping service
+9134,"Meals, diet and nutrition - New Connections",NULL,NULL,Lookups_Outputs,"Meals, Diet and Nutrition",New connections/referrals to Personal Assistant - (food/prep/shopping)
+9134,"Meals, diet and nutrition - New Connections",NULL,NULL,Lookups_Outputs,"Meals, Diet and Nutrition",New connections/referrals to meal delivery service (eg Wiltshire Foods)
+9134,"Meals, diet and nutrition - New Connections",NULL,NULL,Lookups_Outputs,"Meals, Diet and Nutrition",New connections/referrals to other nutrition/meal support services
+9135,"Meals, diet and nutrition - Caseworker Support to independence with nutrition (shopping/food prep etc)",NULL,NULL,Lookups_Outputs,"Meals, Diet and Nutrition",Caseworker support to independence with nutrition (shopping/food prep etc)
+9136,"Meals, diet and nutrition - Food Parcels Provided",NULL,NULL,Lookups_Outputs,"Meals, Diet and Nutrition",Food parcel given
+9137,"Meals, diet and nutrition - Increased independence around nutrition",NULL,NULL,Lookups_Outcomes,"Meals, Diet and Nutrition",Increased independence around nutrition
+9138,"Meals, diet and nutrition - Improved physical health (nutrition-related - healthy eating)",NULL,NULL,Lookups_Outcomes,"Meals, Diet and Nutrition",Improved physical health (nutrition-related - healthy eating)
+9139,Relationships/Family and Friends - New Connections,NULL,NULL,Lookups_Outputs,Relationships / Family and Friends,New connections/referrals to Social Services Adult Team
+9139,Relationships/Family and Friends - New Connections,NULL,NULL,Lookups_Outputs,Relationships / Family and Friends,New connections/referrals to Legal Advice
+9139,Relationships/Family and Friends - New Connections,NULL,NULL,Lookups_Outputs,Relationships / Family and Friends,New connections/referrals to Personal Assistant - Support to maintain relationships
+9139,Relationships/Family and Friends - New Connections,NULL,NULL,Lookups_Outputs,Relationships / Family and Friends,New connections/referrals to VCSE (social leisure groups /support etc)
+9139,Relationships/Family and Friends - New Connections,NULL,NULL,Lookups_Outputs,Relationships / Family and Friends,New connection to Devon Carers
+9140,Relationships/Family and Friends - Caseworker support to maintain and develop relationships with family and friends,NULL,NULL,Lookups_Outputs,Relationships / Family and Friends,Caseworker support to maintain and develop relationships with family and friends
+9141,Relationships/Family & Friends  - Improved Social Skills,NULL,NULL,Lookups_Outcomes,Relationships / Family and Friends,Improved social skills
+9142,Relationships/Family & Friends  - Improved relationships with family and friends and carers,NULL,NULL,Lookups_Outcomes,Relationships / Family and Friends,Improved relationships with family and friends and carers
+9143,Relationships/Family and Friends - Reduced feelings of loneliness,NULL,NULL,Lookups_Outcomes,Relationships / Family and Friends,Reduced feelings of loneliness
+9144,Relationships/Family and Friends - Clients own caring role being better managed,NULL,NULL,Lookups_Outcomes,Relationships / Family and Friends,Clients own caring role being better managed
+9145,Relationships/Family and Friends - Clients Carer better supported,NULL,NULL,Lookups_Outcomes,Relationships / Family and Friends,Clients Carer better supported
+9146,Money and Finance - New Connections,NULL,NULL,Lookups_Outputs,Money and Finance,New connection to DWP regarding benefits advice/application
+9146,Money and Finance - New Connections,NULL,NULL,Lookups_Outputs,Money and Finance,New connections/referrals to TTVS Financial Inclusion project
+9146,Money and Finance - New Connections,NULL,NULL,Lookups_Outputs,Money and Finance,New connections/referrals to VCSE finance support
+9146,Money and Finance - New Connections,NULL,NULL,Lookups_Outputs,Money and Finance,New connections/referrals to Fuel Poverty Services/assistance
+9146,Money and Finance - New Connections,NULL,NULL,Lookups_Outputs,Money and Finance,New connection for banking services
+9147,Money and finance- Caseworker Support,Money and Finance Caseworker Support,Caseworker support to access financial/benefits advice,Lookups_Outputs,Money and Finance,Caseworker support to access financial/benefits advice
+9147,Money and finance- Caseworker Support,Money and Finance Caseworker Support,Caseworker support to manage finances/debt,Lookups_Outputs,Money and Finance,Caseworker support to manage finances/debt
+9148,Money and Finance - Improved organisation/management of finances,NULL,NULL,Lookups_Outcomes,Money and Finance,Improved organisation/management of finances
+9149,Money and Finance - Debt Managed/being managed,NULL,NULL,Lookups_Outcomes,Money and Finance,Debt Managed/being managed
+9150,Money and Finance - Overall improved financial status,NULL,NULL,Lookups_Outcomes,Money and Finance,Overall improved financial status
+9151,Money and Finance - Financial Gain,Financial Gain - Options,Financial gain - welfare benefits,Lookups_Outcomes,Money and Finance,Financial gain - welfare benefits
+9151,Money and Finance - Financial Gain,Financial Gain - Options,Financial gain/charitable payment,Lookups_Outcomes,Money and Finance,Financial gain/charitable payment
+9151,Money and Finance - Financial Gain,Financial Gain - Options,Financial gain - other,Lookups_Outcomes,Money and Finance,Financial gain - other
+9152,Money and Finance - Moved out of poverty threshold,NULL,NULL,Lookups_Outcomes,Money and Finance,Moved out of poverty threshold
+9153,Money and Finance - Fuel poverty Reduced,NULL,NULL,Lookups_Outcomes,Money and Finance,Fuel Poverty reduced
+9154,"Personal growth, Learning/Employment & skills - New Connections","Personal growth, Learning/Employment & skills - New Connections",New connection to employment services (Jobcentre etc),Lookups_Outputs,"Personal Growth, Learning / Employment & Skills",New connection to employment services (Jobcentre etc)
+9154,"Personal growth, Learning/Employment & skills - New Connections","Personal growth, Learning/Employment & skills - New Connections",New connections/referrals to Social Services Adult Team,Lookups_Outputs,"Personal Growth, Learning / Employment & Skills",New connections/referrals to Social Services Adult Team
+9154,"Personal growth, Learning/Employment & skills - New Connections","Personal growth, Learning/Employment & skills - New Connections",New connection to education/training opportunities,Lookups_Outputs,"Personal Growth, Learning / Employment & Skills",New connection to education/training opportunities
+9154,"Personal growth, Learning/Employment & skills - New Connections","Personal growth, Learning/Employment & skills - New Connections",New connection to volunteering opportunities,Lookups_Outputs,"Personal Growth, Learning / Employment & Skills",New connection to volunteering opportunities
+9154,"Personal growth, Learning/Employment & skills - New Connections","Personal growth, Learning/Employment & skills - New Connections",New connection to careers advice,Lookups_Outputs,"Personal Growth, Learning / Employment & Skills",New connection to careers advice
+9155,"Personal Growth, Learning/Employment & skills - Caseworker Support","Personal Growth, Learning/Employment & skills - Caseworker Support",Caseworker support to improve employment prospects,Lookups_Outputs,"Personal Growth, Learning / Employment & Skills",Caseworker support to improve employment prospects
+9155,"Personal Growth, Learning/Employment & skills - Caseworker Support","Personal Growth, Learning/Employment & skills - Caseworker Support",Caseworker support to access volunteering,Lookups_Outputs,"Personal Growth, Learning / Employment & Skills",Caseworker support to access volunteering
+9155,"Personal Growth, Learning/Employment & skills - Caseworker Support","Personal Growth, Learning/Employment & skills - Caseworker Support",Caseworker support to begin education,Lookups_Outputs,"Personal Growth, Learning / Employment & Skills",Caseworker support to begin education
+9155,"Personal Growth, Learning/Employment & skills - Caseworker Support","Personal Growth, Learning/Employment & skills - Caseworker Support",Caseworker support to begin employment,Lookups_Outputs,"Personal Growth, Learning / Employment & Skills",Caseworker support to begin employment
+9155,"Personal Growth, Learning/Employment & skills - Caseworker Support","Personal Growth, Learning/Employment & skills - Caseworker Support",Caseworker support to remain in education,Lookups_Outputs,"Personal Growth, Learning / Employment & Skills",Caseworker support to remain in education
+9155,"Personal Growth, Learning/Employment & skills - Caseworker Support","Personal Growth, Learning/Employment & skills - Caseworker Support",Caseworker support to remain in current employment,Lookups_Outputs,"Personal Growth, Learning / Employment & Skills",Caseworker support to remain in current employment
+9156,"Personal Growth, Learning/Employment & skills - Outcomes","Personal Growth, Learning/Employment & skills Outcomes","Moved into pre-employment (work experience, training)",Lookups_Outcomes,"Personal Growth, Learning / Employment & Skills","Moved into pre-employment (work experience, training)"
+9156,"Personal Growth, Learning/Employment & skills - Outcomes","Personal Growth, Learning/Employment & skills Outcomes",Moved into employment - Full time,Lookups_Outcomes,"Personal Growth, Learning / Employment & Skills",Moved into employment - Full time
+9156,"Personal Growth, Learning/Employment & skills - Outcomes","Personal Growth, Learning/Employment & skills Outcomes",Moved into employment - Part time,Lookups_Outcomes,"Personal Growth, Learning / Employment & Skills",Moved into employment - Part time
+9156,"Personal Growth, Learning/Employment & skills - Outcomes","Personal Growth, Learning/Employment & skills Outcomes",Moved into education/training,Lookups_Outcomes,"Personal Growth, Learning / Employment & Skills",Moved into education/training
+9156,"Personal Growth, Learning/Employment & skills - Outcomes","Personal Growth, Learning/Employment & skills Outcomes",Moved into volunteering,Lookups_Outcomes,"Personal Growth, Learning / Employment & Skills",Moved into volunteering
+9156,"Personal Growth, Learning/Employment & skills - Outcomes","Personal Growth, Learning/Employment & skills Outcomes",Ending employment avoided,Lookups_Outcomes,"Personal Growth, Learning / Employment & Skills",Ending employment avoided
+9156,"Personal Growth, Learning/Employment & skills - Outcomes","Personal Growth, Learning/Employment & skills Outcomes",Ending education or training avoided,Lookups_Outcomes,"Personal Growth, Learning / Employment & Skills",Ending education or training avoided
+9156,"Personal Growth, Learning/Employment & skills - Outcomes","Personal Growth, Learning/Employment & skills Outcomes",Improved motivation to engage in opportunities,Lookups_Outcomes,"Personal Growth, Learning / Employment & Skills",Improved motivation to engage in opportunities
+9156,"Personal Growth, Learning/Employment & skills - Outcomes","Personal Growth, Learning/Employment & skills Outcomes",Improved life skills,Lookups_Outcomes,"Personal Growth, Learning / Employment & Skills",Improved life skills
+9157,Community Connection - New Connections,Community Connection- New Connections,New connections/referrals to Social Services Adult Team,Lookups_Outputs,Community Connection,New connections/referrals to Social Services Adult Team
+9157,Community Connection - New Connections,Community Connection- New Connections,New connections/referrals to transport services (eg volunteer/driving schemes/public etc),Lookups_Outputs,Community Connection,New connections/referrals to transport services (eg volunteer/driving schemes/public etc)
+9157,Community Connection - New Connections,Community Connection- New Connections,New connections/referrals to Personal Assistant - Enabling/accessing communities,Lookups_Outputs,Community Connection,New connections/referrals to Personal Assistant - Enabling/accessing communities
+9157,Community Connection - New Connections,Community Connection- New Connections,New connections/referrals to community groups/activities (addressing loneliness),Lookups_Outputs,Community Connection,New connections/referrals to community groups/activities (addressing loneliness)
+9177,Caseworker supported to access public transport or other local transport options,NULL,NULL,Lookups_Outputs,Community Connection,Caseworker supported to access public transport or other local transport options
+9178,Caseworker supported to access community opportunities and facilities (both recreational and all local services),NULL,NULL,Lookups_Outputs,Community Connection,Caseworker supported to access community opportunities and facilities (both recreational and all local services)
+9179,Client more able to access community facilities and services (including public sector services),NULL,NULL,Lookups_Outcomes,Community Connection,Client more able to access community facilities and services (including public sector services)
+9180,Increased independance with travel,NULL,NULL,Lookups_Outcomes,Community Connection,Increased independence with travel
+9181,Client reports feeling better connected to local community resources,NULL,NULL,Lookups_Outcomes,Community Connection,Client reports feeling better connected to local community resources
+9182,Protection from Abuse and Neglect  - New Connections,Protection from Abuse and Neglect  - New Connections,New connections/referrals to Police,Lookups_Outputs,Client Protection from Abuse and Neglect,New connections/referrals to Police
+9182,Protection from Abuse and Neglect  - New Connections,Protection from Abuse and Neglect  - New Connections,New connections/referrals to Legal Advice (not categorized currently),Lookups_Outputs,Client Protection from Abuse and Neglect,New connections/referrals to Legal Advice
+9182,Protection from Abuse and Neglect  - New Connections,Protection from Abuse and Neglect  - New Connections,New connections/referrals to MASH/Safeguarding/Child protection,Lookups_Outputs,Client Protection from Abuse and Neglect,New connections/referrals to MASH/Safeguarding/Child protection
+9182,Protection from Abuse and Neglect  - New Connections,Protection from Abuse and Neglect  - New Connections,New connections/referrals to VCSE domestic abuse support (not categorized currently),Lookups_Outputs,Client Protection from Abuse and Neglect,New connections/referrals to VCSE domestic abuse support
+9183,Protection from Abuse and Neglect  - Hygiene Parcels,NULL,NULL,Lookups_Outputs,Client Protection from Abuse and Neglect,Hygiene parcel given
+9184,Protection from Abuse and Neglect  - Abuse and neglect reduced or eradicated,NULL,NULL,Lookups_Outcomes,Client Protection from Abuse and Neglect,Abuse and neglect reduced or eradicated
+9185,Child and Family Support and Protection - New Connections,Child and Family Support and Protection - New Connections,Connections/referrals to Early help,Lookups_Outputs,Child and Family Support and Protection,Connections/referrals to Early help
+9185,Child and Family Support and Protection - New Connections,Child and Family Support and Protection - New Connections,New connections/referrals to Social Services C&YP Team,Lookups_Outputs,Child and Family Support and Protection,New connections/referrals to Social Services C&YP Team
+9185,Child and Family Support and Protection - New Connections,Child and Family Support and Protection - New Connections,Connections/referrals to Devon Young Carers,Lookups_Outputs,Child and Family Support and Protection,Connections/referrals to Devon Young Carers
+9186,Child and Family Support and Protection - Caseworker Support,Child and Family Support and Protection - Caseworker Support,Caseworker TAF meeting attended,Lookups_Outputs,Child and Family Support and Protection,Caseworker TAF meeting attended
+9186,Child and Family Support and Protection - Caseworker Support,Child and Family Support and Protection - Caseworker Support,Caseworker support to arrange childcare,Lookups_Outputs,Child and Family Support and Protection,Caseworker support to arrange childcare
+9186,Child and Family Support and Protection - Caseworker Support,Child and Family Support and Protection - Caseworker Support,Caseworker support for child to engage with education,Lookups_Outputs,Child and Family Support and Protection,Caseworker support for child to engage with education
+9187,Protection from Abuse and Neglect  - Caseworker Support,Protection from Abuse and Neglect  - Caseworker Support,Caseworker support to develop self-care skills (neglect) (can these be more specific?),Lookups_Outputs,Child and Family Support and Protection,Caseworker support to develop self-care skills (neglect)
+9187,Protection from Abuse and Neglect  - Caseworker Support,Protection from Abuse and Neglect  - Caseworker Support,Caseworker support for client/dependent supported to live safely  (can these be more specific?),Lookups_Outputs,Child and Family Support and Protection,Caseworker support for client/dependent supported to live safely
+9187,Protection from Abuse and Neglect  - Caseworker Support,Protection from Abuse and Neglect  - Caseworker Support,Caseworker safeguarding referral made,Lookups_Outputs,Child and Family Support and Protection,Caseworker safeguarding referral made
+9187,Protection from Abuse and Neglect  - Caseworker Support,Protection from Abuse and Neglect  - Caseworker Support,Caseworker safeguarding meeting attended,Lookups_Outputs,Child and Family Support and Protection,Caseworker safeguarding meeting attended
+9188,Child and Family Support and Protection - Child and family support in place,NULL,NULL,Lookups_Outcomes,Child and Family Support and Protection,Child and family support in place
+9189,Child and Family Support and Protection - Improved support for child(ren),NULL,NULL,Lookups_Outcomes,Child and Family Support and Protection,Improved support for child(ren)
+9190,Child and Family Support and Protection - Child able to access education,NULL,NULL,Lookups_Outcomes,Child and Family Support and Protection,Child able to access education
+9191,CNA score reduction (Complex needs assessment),NULL,NULL,Lookups_Outcomes,Complex Needs Assessment,CNA score reduction (Complex needs assessment)

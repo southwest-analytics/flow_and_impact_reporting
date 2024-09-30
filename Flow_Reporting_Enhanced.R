@@ -46,6 +46,9 @@ library(flextable)
 library(officer)
 library(officedown)
 library(svDialogs)
+library(httr)
+library(jsonlite)
+library(uuid)
 library(conflicted)
 
 # * 1.2. Define functions ----
@@ -270,9 +273,12 @@ fnImportReportingWorkbook_Outcomes <- function(path, sheet = 'Outcomes'){
 
 # * * * 1.2.1.7. Import Functions: Activity Workbook ----
 fnImportActivityWorkbook <- function(path, sheet = 'All HIU Clients'){
-  # Only import the first 4 columns of the sheet and set the variable type
-  df <- read_excel(path = f, 
-                   sheet = sheet, 
+  # DEVELOPMENT NOTE: If we want to only report on engaged clients this is where we will need 
+  # to filter the data
+  
+  # Import the activity file
+  df <- read_excel(path, 
+                   sheet, 
                    skip = 2,
                    col_types = c('text', rep('numeric', 3), rep('date', 2), rep('numeric', 24)),
                    col_names = FALSE) %>%
@@ -286,9 +292,10 @@ fnImportActivityWorkbook <- function(path, sheet = 'All HIU Clients'){
                          'em_12m_prior', 'em_12m_post_start', 'em_12m_during', 'em_12m_post_end',
                          'ed_12m_prior', 'ed_12m_post_start', 'ed_12m_during', 'ed_12m_post_end',
                          'amb_12m_prior', 'amb_12m_post_start', 'amb_12m_during', 'amb_12m_post_end')) %>%
-df %>% dplyr::filter(start_date >= dt_current_month &
-                       start_date < dt_current_month %m+% months(1)) %>%
-    summarise(across(.cols = c(2:4, 7:30), .fn = function(x){sum(x, na.rm = TRUE)})) %>%
+    dplyr::filter(!is.na(start_date))
+    
+  # Calculate the true ED values (i.e. add in the AMB comveyances to the ED attendances to get the overall ED attendances)
+  df <- df %>%
     mutate(ed_3m_prior = ed_3m_prior + amb_3m_prior,
            ed_3m_post_start = ed_3m_post_start + amb_3m_post_start,
            ed_3m_during = ed_3m_during + amb_3m_during,
@@ -296,32 +303,147 @@ df %>% dplyr::filter(start_date >= dt_current_month &
            ed_12m_prior = ed_12m_prior + amb_12m_prior,
            ed_12m_post_start = ed_12m_post_start + amb_12m_post_start,
            ed_12m_during = ed_12m_during + amb_12m_during,
-           ed_12m_post_end = ed_12m_post_end + amb_12m_post_end) %>%
-    mutate(ed_pre_vs_post_start = sprintf('Pre (%d) to Post Start (%d) Percentage Change %.1f%%',
-                                          ed_3m_prior, ed_3m_post_start, (ed_3m_post_start - ed_3m_prior)/ed_3m_prior * 100),
-           ed_pre_vs_during = sprintf('Pre (%d) to During (%d) Percentage Change %.1f%%',
-                                      ed_3m_prior, ed_3m_post_start, (ed_3m_post_start - ed_3m_prior)/ed_3m_prior * 100),
-             
-             (ed_3m_during - ed_3m_prior)/ed_3m_prior,
-           ed_pre_vs_post_end = (ed_3m_post_end - ed_3m_prior)/em_3m_prior,
-           em_pre_vs_post_start = (em_3m_post_start - em_3m_prior)/em_3m_prior,
-           em_pre_vs_during = (em_3m_during - em_3m_prior)/em_3m_prior,
-           em_pre_vs_post_end = (em_3m_post_end - em_3m_prior)/em_3m_prior,
-           amb_pre_vs_post_start = (amb_3m_post_start - amb_3m_prior)/amb_3m_prior,
-           amb_pre_vs_during = (amb_3m_during - amb_3m_prior)/amb_3m_prior,
-           amb_pre_vs_post_end = (amb_3m_post_end - amb_3m_prior)/amb_3m_prior) %>%
-    data.frame()
+           ed_12m_post_end = ed_12m_post_end + amb_12m_post_end)
+  # Set any blank end_date to the start of the next month after the current month
+  df <- df %>% mutate(end_date = if_else(is.na(end_date), dt_current_month %m+% months(1), end_date))
+  # Calculate duration for each row
+  df <- df %>% mutate(duration = as.numeric(difftime(end_date, start_date)), .after = 'end_date')
+  # Standardise the 3m during periods to 91.25 days to be equivalent to 3 months
+  df <- df %>% mutate(em_3m_during = em_3m_during/duration*91.25, 
+                      ed_3m_during = ed_3m_during/duration*91.25, 
+                      amb_3m_during = amb_3m_during/duration*91.25)
+  # Standardise the 12m during periods to 365 days to be equivalent to 12 months
+  df <- df %>% mutate(em_12m_during = em_12m_during/duration*365, 
+                      ed_12m_during = ed_12m_during/duration*365, 
+                      amb_12m_during = amb_12m_during/duration*365)
   
-dt_current_month <- as.Date('2024-07-01')
+  # Group the data
+  df_tmp <- df %>% dplyr::filter(start_date >= dt_current_month &
+                                   start_date < dt_current_month %m+% months(1)) %>% 
+    summarise(across(.cols = 8:31, .fns = function(x){sum(x, na.rm = TRUE)}),
+              `Activity Reduction Cohort` = n()) %>%
+    mutate(period = 'current_month', .before = 1)
+  # Quarter 1
+  if(dt_current_month >= dt_year_start){
+    df_tmp <- df_tmp %>% bind_rows(
+      df %>% dplyr::filter(start_date >= dt_year_start &
+                             start_date < dt_year_start %m+% months(3)) %>% 
+      summarise(across(.cols = 8:31, .fns = function(x){sum(x, na.rm = TRUE)}),
+                `Activity Reduction Cohort` = n()) %>%
+      mutate(period = 'q1', .before = 1))
+  } else {
+    df_tmp <- df_tmp %>% bind_rows(data.frame(period = 'q1'))
+  }
+  
+  # Quarter 2
+  if(dt_current_month >= dt_year_start %m+% months(3)){
+    df_tmp <- df_tmp %>% bind_rows(
+      df %>% dplyr::filter(start_date >= dt_year_start %m+% months(3) &
+                             start_date < dt_year_start %m+% months(6)) %>% 
+        summarise(across(.cols = 8:31, .fns = function(x){sum(x, na.rm = TRUE)}),
+                  `Activity Reduction Cohort` = n()) %>%
+        mutate(period = 'q2', .before = 1))
+  } else {
+    df_tmp <- df_tmp %>% bind_rows(data.frame(period = 'q2'))
+  }
 
-    
-    # # Remove any rows that have an NA in column
-    # dplyr::filter( !(is.na(client_id) | is.na(month) | is.na(section) | is.na(outcome))) %>%
-    # # Add the source filename to the data
-    # mutate(source = basename(file.path(f)))
+  if(dt_current_month >= dt_year_start %m+% months(6)){
+    df_tmp <- df_tmp %>% bind_rows(
+      df %>% dplyr::filter(start_date >= dt_year_start %m+% months(6) &
+                             start_date < dt_year_start %m+% months(9)) %>% 
+        summarise(across(.cols = 8:31, .fns = function(x){sum(x, na.rm = TRUE)}),
+                  `Activity Reduction Cohort` = n()) %>%
+        mutate(period = 'q3', .before = 1))
+  } else {
+    df_tmp <- df_tmp %>% bind_rows(data.frame(period = 'q3'))
+  }
   
-  # Return the data frame
+  if(dt_current_month >= dt_year_start %m+% months(9)){
+    df_tmp <- df_tmp %>% bind_rows(
+      df %>% dplyr::filter(start_date >= dt_year_start %m+% months(9) &
+                             start_date < dt_year_start %m+% months(12)) %>% 
+        summarise(across(.cols = 8:31, .fns = function(x){sum(x, na.rm = TRUE)}),
+                  `Activity Reduction Cohort` = n()) %>%
+        mutate(period = 'q4', .before = 1))
+  } else {
+    df_tmp <- df_tmp %>% bind_rows(data.frame(period = 'q4'))
+  }
+  
+  df_tmp <- df_tmp %>% bind_rows(
+    df %>% dplyr::filter(start_date >= dt_year_start &
+                             start_date < dt_year_start %m+% months(12)) %>% 
+        summarise(across(.cols = 8:31, .fns = function(x){sum(x, na.rm = TRUE)}),
+                  `Activity Reduction Cohort` = n()) %>%
+        mutate(period = 'ytd', .before = 1))
+
+  # Calculate the reductions
+  df_tmp <- df_tmp %>% 
+    mutate(`Previous 3 Month Activity for Clients Supported in Period: ED Attendances` = ed_3m_prior,
+           `Previous 3 Month Activity for Clients Supported in Period: Emergency Admissions` = em_3m_prior,
+           `Previous 3 Month Activity for Clients Supported in Period: Ambulance Conveyances` = amb_3m_prior,
+           `Previous 12 Month Activity for Clients Supported in Period: ED Attendances` = ed_12m_prior,
+           `Previous 12 Month Activity for Clients Supported in Period: Emergency Admissions` = em_3m_prior,
+           `Previous 12 Month Activity for Clients Supported in Period: Ambulance Conveyances` = amb_3m_prior,
+
+           `EM Adms 3 Month Pre vs During` = sprintf('%.1f%% (from: %.0f to: %.0f)', (em_3m_during - em_3m_prior)/em_3m_prior*100, em_3m_prior, em_3m_during),
+           `EM Adms 3 Month Pre vs Post End` = sprintf('%.1f%% (from: %.0f to: %.0f)', (em_3m_post_end - em_3m_prior)/em_3m_prior*100, em_3m_prior, em_3m_post_end),
+           `ED Atts 3 Month Pre vs During` = sprintf('%.1f%% (from: %.0f to: %.0f)', (ed_3m_during - ed_3m_prior)/ed_3m_prior*100, ed_3m_prior, ed_3m_during),
+           `ED Atts 3 Month Pre vs Post Start` = sprintf('%.1f%% (from: %.0f to: %.0f)', (ed_3m_post_start - ed_3m_prior)/ed_3m_prior*100, ed_3m_prior, ed_3m_post_start),
+           `ED Atts 3 Month Pre vs Post End` = sprintf('%.1f%% (from: %.0f to: %.0f)', (em_3m_post_end - ed_3m_prior)/ed_3m_prior*100, ed_3m_prior, em_3m_post_end),
+           `AMB Conveys 3 Month Pre vs Post Start` = sprintf('%.1f%% (from: %.0f to: %.0f)', (amb_3m_post_start - amb_3m_prior)/amb_3m_prior*100, amb_3m_prior, amb_3m_post_start),
+           `AMB Conveys 3 Month Pre vs During` = sprintf('%.1f%% (from: %.0f to: %.0f)', (amb_3m_during - amb_3m_prior)/amb_3m_prior*100, amb_3m_prior, amb_3m_during),
+           `AMB Conveys 3 Month Pre vs Post End` = sprintf('%.1f%% (from: %.0f to: %.0f)', (em_3m_post_end - amb_3m_prior)/amb_3m_prior*100, amb_3m_prior, em_3m_post_end),
+
+           `EM Adms 12 Month Pre vs Post Start` = sprintf('%.1f%% (from: %.0f to: %.0f)', (em_12m_post_start - em_12m_prior)/em_12m_prior*100, em_12m_prior, em_12m_post_start),
+           `EM Adms 12 Month Pre vs During` = sprintf('%.1f%% (from: %.0f to: %.0f)', (em_12m_during - em_12m_prior)/em_12m_prior*100, em_12m_prior, em_12m_during),
+           `EM Adms 12 Month Pre vs Post End` = sprintf('%.1f%% (from: %.0f to: %.0f)', (em_12m_post_end - em_12m_prior)/em_12m_prior*100, em_12m_prior, em_12m_post_end),
+           `ED Adms 12 Month Pre vs Post Start` = sprintf('%.1f%% (from: %.0f to: %.0f)', (ed_12m_post_start - ed_12m_prior)/ed_12m_prior*100, ed_12m_prior, ed_12m_post_start),
+           `ED Adms 12 Month Pre vs During` = sprintf('%.1f%% (from: %.0f to: %.0f)', (ed_12m_during - ed_12m_prior)/ed_12m_prior*100, ed_12m_prior, ed_12m_during),
+           `ED Adms 12 Month Pre vs Post End` = sprintf('%.1f%% (from: %.0f to: %.0f)', (ed_12m_post_end - ed_12m_prior)/ed_12m_prior*100, ed_12m_prior, ed_12m_post_end),
+           `AMB Adms 12 Month Pre vs Post Start` = sprintf('%.1f%% (from: %.0f to: %.0f)', (amb_12m_post_start - amb_12m_prior)/amb_12m_prior*100, amb_12m_prior, amb_12m_post_start),
+           `AMB Adms 12 Month Pre vs During` = sprintf('%.1f%% (from: %.0f to: %.0f)', (amb_12m_during - amb_12m_prior)/amb_12m_prior*100, amb_12m_prior, amb_12m_during),
+           `AMB Adms 12 Month Pre vs Post End` = sprintf('%.1f%% (from: %.0f to: %.0f)', (amb_12m_post_end - amb_12m_prior)/amb_12m_prior*100, amb_12m_prior, amb_12m_post_end))
+  
+  df <- t(df_tmp %>% select(-period)) %>% as.data.frame()
+  colnames(df) <- df_tmp$period
+  df <- df %>% mutate(metric = rownames(.), .before = 1)
+  rownames(df) <- NULL
   return(df)
+}
+
+# * * 1.2.2. Impact Reporting Section ----
+
+# Set up main URL
+url_text <- 'https://app.impactreporting.co.uk/api/v1/logs'
+
+# * * * 1.2.2.1. Impact Reporting: Post Data ----
+fnPostData <- function(x, uuid){
+  body_text <- jsonlite::toJSON(
+    list(
+      'apikey' = 'd866628d-f9f3-4668-9849-cbba687774d9',
+      'logs' = list(
+        list(
+          'ownerId' = 36517,
+          'ownerType' = 'user',
+          'activityId' = as.integer(x['id']),
+          'projectId' = unname(project_id),
+          'loggedByUserId' = 36517,
+          'start' = format(as.Date(x['month']), '%d/%m/%Y'),
+          'value' = as.numeric(x['value']),
+          'text' = paste0('Bulk Upload [', x['uuid'], ']'),
+          'classifications' = list(
+            list(
+              'name' = x['classification_name'],
+              'value' = if_else(is.na(x['classification_value']), '', x['classification_value'])
+            )
+          )
+        )
+      )
+    ), 
+    auto_unbox = TRUE
+  )
+  res <- POST(url = url_text, body = body_text)
+  return(res$status_code)
 }
 
 
@@ -345,26 +467,26 @@ fnGetNewClientsSupported <- function(df_ct){
   df_tmp <- df_ct %>% dplyr::filter(!(ct_closure %in% unlist(unname(ini_file_settings$caseload_tracker_exclusions))))
   
   # Trim the data to end at the end of the current month
-  df_tmp <- df_tmp %>% dplyr::filter(ct_start <= dt_current_month + months(1))
+  df_tmp <- df_tmp %>% dplyr::filter(ct_start <= dt_current_month %m+% months(1))
   
   # Calculate for each period
   curr_month <- df_tmp %>% dplyr::filter((ct_start >= dt_current_month) & 
-                                           (ct_start < dt_current_month + months(1))) %>% NROW()
+                                           (ct_start < dt_current_month %m+% months(1))) %>% NROW()
   if(dt_current_month >= dt_year_start)
     q1 <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start) & 
-                                     (ct_start < dt_year_start + months(3))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(3))
-    q2 <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start + months(3)) & 
-                                     (ct_start < dt_year_start + months(6))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(6))
-    q3 <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start + months(6)) & 
-                                     (ct_start < dt_year_start + months(9))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(9))
-    q4 <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start + months(9)) & 
-                                     (ct_start < dt_year_start + months(12))) %>% NROW()
+                                     (ct_start < dt_year_start %m+% months(3))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(3))
+    q2 <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start %m+% months(3)) & 
+                                     (ct_start < dt_year_start %m+% months(6))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(6))
+    q3 <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start %m+% months(6)) & 
+                                     (ct_start < dt_year_start %m+% months(9))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(9))
+    q4 <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start %m+% months(9)) & 
+                                     (ct_start < dt_year_start %m+% months(12))) %>% NROW()
   if(dt_current_month >= dt_year_start)
     ytd <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start) & 
-                                      (ct_start < dt_year_start + months(12))) %>% NROW()
+                                      (ct_start < dt_year_start %m+% months(12))) %>% NROW()
   df_tmp <- data.frame(metric = 'New Clients Supported in Period',
                        current_month = curr_month,
                        q1 = q1,
@@ -395,26 +517,26 @@ fnGetClientsSupported <- function(df_ct){
   df_tmp <- df_ct %>% dplyr::filter(!(ct_closure %in% unlist(unname(ini_file_settings$caseload_tracker_exclusions))))
   
   # Trim the data to end at the end of the current month
-  df_tmp <- df_tmp %>% dplyr::filter(ct_start <= dt_current_month + months(1) & 
-                                       (is.na(ct_end) | (ct_end < dt_current_month + months(1))))
+  df_tmp <- df_tmp %>% dplyr::filter(ct_start <= dt_current_month %m+% months(1) & 
+                                       (is.na(ct_end) | (ct_end < dt_current_month %m+% months(1))))
   
   # Calculate for each period
-  curr_month <- df_tmp %>% dplyr::filter((ct_start < dt_current_month + months(1)) & 
+  curr_month <- df_tmp %>% dplyr::filter((ct_start < dt_current_month %m+% months(1)) & 
                                            (is.na(ct_end) | (ct_end >= dt_current_month & ct_start <= ct_end))) %>% NROW()
   if(dt_current_month >= dt_year_start)
-    q1 <- df_tmp %>% dplyr::filter((ct_start < dt_year_start + months(3)) & 
+    q1 <- df_tmp %>% dplyr::filter((ct_start < dt_year_start %m+% months(3)) & 
                                      (is.na(ct_end) | (ct_end >= dt_year_start & ct_start <= ct_end))) %>% NROW()
   if(dt_current_month >= dt_year_start)
-    q2 <- df_tmp %>% dplyr::filter((ct_start < dt_year_start + months(6)) & 
-                                     (is.na(ct_end) | (ct_end >= dt_year_start + months(3) & ct_start <= ct_end))) %>% NROW()
+    q2 <- df_tmp %>% dplyr::filter((ct_start < dt_year_start %m+% months(6)) & 
+                                     (is.na(ct_end) | (ct_end >= dt_year_start %m+% months(3) & ct_start <= ct_end))) %>% NROW()
   if(dt_current_month >= dt_year_start)
-    q3 <- df_tmp %>% dplyr::filter((ct_start < dt_year_start + months(9)) & 
-                                     (is.na(ct_end) | (ct_end >= dt_year_start + months(6) & ct_start <= ct_end))) %>% NROW()
+    q3 <- df_tmp %>% dplyr::filter((ct_start < dt_year_start %m+% months(9)) & 
+                                     (is.na(ct_end) | (ct_end >= dt_year_start %m+% months(6) & ct_start <= ct_end))) %>% NROW()
   if(dt_current_month >= dt_year_start)
-    q4 <- df_tmp %>% dplyr::filter((ct_start < dt_year_start + months(12)) & 
-                                     (is.na(ct_end) | (ct_end >= dt_year_start + months(9) & ct_start <= ct_end))) %>% NROW()
+    q4 <- df_tmp %>% dplyr::filter((ct_start < dt_year_start %m+% months(12)) & 
+                                     (is.na(ct_end) | (ct_end >= dt_year_start %m+% months(9) & ct_start <= ct_end))) %>% NROW()
   if(dt_current_month >= dt_year_start)
-    ytd <- df_tmp %>% dplyr::filter((ct_start < dt_year_start + months(12)) & 
+    ytd <- df_tmp %>% dplyr::filter((ct_start < dt_year_start %m+% months(12)) & 
                                       (is.na(ct_end) | (ct_end >= dt_year_start & ct_start <= ct_end))) %>% NROW()
   df_tmp <- data.frame(metric = 'Clients Supported in Period',
                        current_month = curr_month,
@@ -468,26 +590,26 @@ fnGetReductionInLoneliness <- function(df_ct){
   df_tmp <- df_tmp %>% dplyr::filter(ct_loneliness_in=='Yes' & ct_loneliness_out=='No')
 
   # Trim the data to end at the end of the current month
-  df_tmp <- df_tmp %>% dplyr::filter(ct_end <= dt_current_month + months(1))
+  df_tmp <- df_tmp %>% dplyr::filter(ct_end <= dt_current_month %m+% months(1))
   
   # Calculate for each period
   curr_month <- df_tmp %>% dplyr::filter((ct_end >= dt_current_month) & 
-                                           (ct_end < dt_current_month + months(1))) %>% NROW()
+                                           (ct_end < dt_current_month %m+% months(1))) %>% NROW()
   if(dt_current_month >= dt_year_start)
     q1 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start) & 
-                                     (ct_end < dt_year_start + months(3))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(3))
-    q2 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(3)) & 
-                                     (ct_end < dt_year_start + months(6))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(6))
-    q3 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(6)) & 
-                                     (ct_end < dt_year_start + months(9))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(9))
-    q4 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(9)) & 
-                                     (ct_end < dt_year_start + months(12))) %>% NROW()
+                                     (ct_end < dt_year_start %m+% months(3))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(3))
+    q2 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start %m+% months(3)) & 
+                                     (ct_end < dt_year_start %m+% months(6))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(6))
+    q3 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start %m+% months(6)) & 
+                                     (ct_end < dt_year_start %m+% months(9))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(9))
+    q4 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start %m+% months(9)) & 
+                                     (ct_end < dt_year_start %m+% months(12))) %>% NROW()
   if(dt_current_month >= dt_year_start)
     ytd <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start) & 
-                                      (ct_end < dt_year_start + months(12))) %>% NROW()
+                                      (ct_end < dt_year_start %m+% months(12))) %>% NROW()
   df_tmp <- data.frame(metric = 'Reduction in Loneliness at End of Support',
                        current_month = curr_month,
                        q1 = q1,
@@ -520,26 +642,26 @@ fnGetIncreasedWEMWBSOnExit <- function(df_ct){
   df_tmp <- df_tmp %>% dplyr::filter(ct_wemwbs_score_out > ct_wemwbs_score_in)
   
   # Trim the data to end at the end of the current month
-  df_tmp <- df_tmp %>% dplyr::filter(ct_end <= dt_current_month + months(1))
+  df_tmp <- df_tmp %>% dplyr::filter(ct_end <= dt_current_month %m+% months(1))
   
   # Calculate for each period
   curr_month <- df_tmp %>% dplyr::filter((ct_end >= dt_current_month) & 
-                                           (ct_end < dt_current_month + months(1))) %>% NROW()
+                                           (ct_end < dt_current_month %m+% months(1))) %>% NROW()
   if(dt_current_month >= dt_year_start)
     q1 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start) & 
-                                     (ct_end < dt_year_start + months(3))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(3))
-    q2 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(3)) & 
-                                     (ct_end < dt_year_start + months(6))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(6))
-    q3 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(6)) & 
-                                     (ct_end < dt_year_start + months(9))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(9))
-    q4 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(9)) & 
-                                     (ct_end < dt_year_start + months(12))) %>% NROW()
+                                     (ct_end < dt_year_start %m+% months(3))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(3))
+    q2 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start %m+% months(3)) & 
+                                     (ct_end < dt_year_start %m+% months(6))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(6))
+    q3 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start %m+% months(6)) & 
+                                     (ct_end < dt_year_start %m+% months(9))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(9))
+    q4 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start %m+% months(9)) & 
+                                     (ct_end < dt_year_start %m+% months(12))) %>% NROW()
   if(dt_current_month >= dt_year_start)
     ytd <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start) & 
-                                      (ct_end < dt_year_start + months(12))) %>% NROW()
+                                      (ct_end < dt_year_start %m+% months(12))) %>% NROW()
   df_tmp <- data.frame(metric = 'Improved Wellbeing at End of Support',
                        current_month = curr_month,
                        q1 = q1,
@@ -572,26 +694,26 @@ fnGetProgressingAtLeastOneGoal <- function(df_ct){
   df_tmp <- df_tmp %>% dplyr::filter(ct_goals_out >= 1)
   
   # Trim the data to end at the end of the current month
-  df_tmp <- df_tmp %>% dplyr::filter(ct_end <= dt_current_month + months(1))
+  df_tmp <- df_tmp %>% dplyr::filter(ct_end <= dt_current_month %m+% months(1))
   
   # Calculate for each period
   curr_month <- df_tmp %>% dplyr::filter((ct_end >= dt_current_month) & 
-                                           (ct_end < dt_current_month + months(1))) %>% NROW()
+                                           (ct_end < dt_current_month %m+% months(1))) %>% NROW()
   if(dt_current_month >= dt_year_start)
     q1 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start) & 
-                                     (ct_end < dt_year_start + months(3))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(3))
-    q2 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(3)) & 
-                                     (ct_end < dt_year_start + months(6))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(6))
-    q3 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(6)) & 
-                                     (ct_end < dt_year_start + months(9))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(9))
-    q4 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(9)) & 
-                                     (ct_end < dt_year_start + months(12))) %>% NROW()
+                                     (ct_end < dt_year_start %m+% months(3))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(3))
+    q2 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start %m+% months(3)) & 
+                                     (ct_end < dt_year_start %m+% months(6))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(6))
+    q3 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start %m+% months(6)) & 
+                                     (ct_end < dt_year_start %m+% months(9))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(9))
+    q4 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start %m+% months(9)) & 
+                                     (ct_end < dt_year_start %m+% months(12))) %>% NROW()
   if(dt_current_month >= dt_year_start)
     ytd <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start) & 
-                                      (ct_end < dt_year_start + months(12))) %>% NROW()
+                                      (ct_end < dt_year_start %m+% months(12))) %>% NROW()
   df_tmp <- data.frame(metric = 'Completed At Least One Goal at End of Support',
                        current_month = curr_month,
                        q1 = q1,
@@ -620,26 +742,26 @@ fnGetClientsEndingSupport <- function(df_ct){
   df_tmp <- df_ct %>% dplyr::filter(!(ct_closure %in% unlist(unname(ini_file_settings$caseload_tracker_exclusions))))
   
   # Trim the data to end at the end of the current month
-  df_tmp <- df_tmp %>% dplyr::filter(ct_end <= dt_current_month + months(1))
+  df_tmp <- df_tmp %>% dplyr::filter(ct_end <= dt_current_month %m+% months(1))
   
   # Calculate for each period
   curr_month <- df_tmp %>% dplyr::filter((ct_end >= dt_current_month) & 
-                                           (ct_end < dt_current_month + months(1))) %>% NROW()
+                                           (ct_end < dt_current_month %m+% months(1))) %>% NROW()
   if(dt_current_month >= dt_year_start)
     q1 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start) & 
-                                     (ct_end < dt_year_start + months(3))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(3))
-    q2 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(3)) & 
-                                     (ct_end < dt_year_start + months(6))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(6))
-    q3 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(6)) & 
-                                     (ct_end < dt_year_start + months(9))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(9))
-    q4 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(9)) & 
-                                     (ct_end < dt_year_start + months(12))) %>% NROW()
+                                     (ct_end < dt_year_start %m+% months(3))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(3))
+    q2 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start %m+% months(3)) & 
+                                     (ct_end < dt_year_start %m+% months(6))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(6))
+    q3 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start %m+% months(6)) & 
+                                     (ct_end < dt_year_start %m+% months(9))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(9))
+    q4 <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start %m+% months(9)) & 
+                                     (ct_end < dt_year_start %m+% months(12))) %>% NROW()
   if(dt_current_month >= dt_year_start)
     ytd <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start) & 
-                                      (ct_end < dt_year_start + months(12))) %>% NROW()
+                                      (ct_end < dt_year_start %m+% months(12))) %>% NROW()
   df_tmp <- data.frame(metric = 'Clients Ending Support',
                        current_month = curr_month,
                        q1 = q1,
@@ -679,47 +801,47 @@ fnGetEntryWEMWBS <- function(df_ct){
   df_tmp <- df_ct %>% dplyr::filter(!(ct_closure %in% unlist(unname(ini_file_settings$caseload_tracker_exclusions))))
 
   # Trim the data to end at the end of the current month
-  df_tmp <- df_tmp %>% dplyr::filter(ct_start <= dt_current_month + months(1))
+  df_tmp <- df_tmp %>% dplyr::filter(ct_start <= dt_current_month %m+% months(1))
   
   # Calculate denominator for each period
   curr_month_denominator <- df_tmp %>% dplyr::filter((ct_start >= dt_current_month) & 
-                                           (ct_start < dt_current_month + months(1))) %>% NROW()
+                                           (ct_start < dt_current_month %m+% months(1))) %>% NROW()
   if(dt_current_month >= dt_year_start)
     q1_denominator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start) & 
-                                     (ct_start < dt_year_start + months(3))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(3))
-    q2_denominator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start + months(3)) & 
-                                     (ct_start < dt_year_start + months(6))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(6))
-    q3_denominator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start + months(6)) & 
-                                     (ct_start < dt_year_start + months(9))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(9))
-    q4_denominator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start + months(9)) & 
-                                     (ct_start < dt_year_start + months(12))) %>% NROW()
+                                     (ct_start < dt_year_start %m+% months(3))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(3))
+    q2_denominator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start %m+% months(3)) & 
+                                     (ct_start < dt_year_start %m+% months(6))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(6))
+    q3_denominator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start %m+% months(6)) & 
+                                     (ct_start < dt_year_start %m+% months(9))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(9))
+    q4_denominator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start %m+% months(9)) & 
+                                     (ct_start < dt_year_start %m+% months(12))) %>% NROW()
   if(dt_current_month >= dt_year_start)
     ytd_denominator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start) & 
-                                      (ct_start < dt_year_start + months(12))) %>% NROW()
+                                      (ct_start < dt_year_start %m+% months(12))) %>% NROW()
   # Trim to only valid WEMWBS entries
   df_tmp <- df_tmp %>% dplyr::filter(!is.na(ct_wemwbs_score_in))
   
   # Calculate numerator for each period
   curr_month_numerator <- df_tmp %>% dplyr::filter((ct_start >= dt_current_month) & 
-                                                       (ct_start < dt_current_month + months(1))) %>% NROW()
+                                                       (ct_start < dt_current_month %m+% months(1))) %>% NROW()
   if(dt_current_month >= dt_year_start)
     q1_numerator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start) & 
-                                                 (ct_start < dt_year_start + months(3))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(3))
-    q2_numerator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start + months(3)) & 
-                                                 (ct_start < dt_year_start + months(6))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(6))
-    q3_numerator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start + months(6)) & 
-                                                 (ct_start < dt_year_start + months(9))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(9))
-    q4_numerator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start + months(9)) & 
-                                                 (ct_start < dt_year_start + months(12))) %>% NROW()
+                                                 (ct_start < dt_year_start %m+% months(3))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(3))
+    q2_numerator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start %m+% months(3)) & 
+                                                 (ct_start < dt_year_start %m+% months(6))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(6))
+    q3_numerator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start %m+% months(6)) & 
+                                                 (ct_start < dt_year_start %m+% months(9))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(9))
+    q4_numerator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start %m+% months(9)) & 
+                                                 (ct_start < dt_year_start %m+% months(12))) %>% NROW()
   if(dt_current_month >= dt_year_start)
     ytd_numerator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start) & 
-                                                  (ct_start < dt_year_start + months(12))) %>% NROW()
+                                                  (ct_start < dt_year_start %m+% months(12))) %>% NROW()
   
   df_tmp <- data.frame(metric = 'Valid Entry WEMWBS',
                        current_month = sprintf('%.1f%% (%d/%d)', (curr_month_numerator / curr_month_denominator) * 100, curr_month_numerator, curr_month_denominator),
@@ -756,47 +878,47 @@ fnGetExitWEMWBS <- function(df_ct){
   df_tmp <- df_ct %>% dplyr::filter(!(ct_closure %in% unlist(unname(ini_file_settings$caseload_tracker_exclusions))))
   
   # Trim the data to end at the end of the current month
-  df_tmp <- df_tmp %>% dplyr::filter(ct_start <= dt_current_month + months(1))
+  df_tmp <- df_tmp %>% dplyr::filter(ct_start <= dt_current_month %m+% months(1))
   
   # Calculate denominator for each period
   curr_month_denominator <- df_tmp %>% dplyr::filter((ct_end >= dt_current_month) & 
-                                           (ct_end < dt_current_month + months(1))) %>% NROW()
+                                           (ct_end < dt_current_month %m+% months(1))) %>% NROW()
   if(dt_current_month >= dt_year_start)
     q1_denominator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start) & 
-                                     (ct_end < dt_year_start + months(3))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(3))
-    q2_denominator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(3)) & 
-                                     (ct_end < dt_year_start + months(6))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(6))
-    q3_denominator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(6)) & 
-                                     (ct_end < dt_year_start + months(9))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(9))
-    q4_denominator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(9)) & 
-                                     (ct_end < dt_year_start + months(12))) %>% NROW()
+                                     (ct_end < dt_year_start %m+% months(3))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(3))
+    q2_denominator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start %m+% months(3)) & 
+                                     (ct_end < dt_year_start %m+% months(6))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(6))
+    q3_denominator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start %m+% months(6)) & 
+                                     (ct_end < dt_year_start %m+% months(9))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(9))
+    q4_denominator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start %m+% months(9)) & 
+                                     (ct_end < dt_year_start %m+% months(12))) %>% NROW()
   if(dt_current_month >= dt_year_start)
     ytd_denominator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start) & 
-                                      (ct_end < dt_year_start + months(12))) %>% NROW()
+                                      (ct_end < dt_year_start %m+% months(12))) %>% NROW()
   # Trim to only valid WEMWBS entries
   df_tmp <- df_tmp %>% dplyr::filter(!is.na(ct_wemwbs_score_out))
   
   # Calculate numerator for each period
   curr_month_numerator <- df_tmp %>% dplyr::filter((ct_end >= dt_current_month) & 
-                                                       (ct_end < dt_current_month + months(1))) %>% NROW()
+                                                       (ct_end < dt_current_month %m+% months(1))) %>% NROW()
   if(dt_current_month >= dt_year_start)
     q1_numerator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start) & 
-                                                 (ct_end < dt_year_start + months(3))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(3))
-    q2_numerator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(3)) & 
-                                                 (ct_end < dt_year_start + months(6))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(6))
-    q3_numerator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(6)) & 
-                                                 (ct_end < dt_year_start + months(9))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(9))
-    q4_numerator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(9)) & 
-                                                 (ct_end < dt_year_start + months(12))) %>% NROW()
+                                                 (ct_end < dt_year_start %m+% months(3))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(3))
+    q2_numerator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start %m+% months(3)) & 
+                                                 (ct_end < dt_year_start %m+% months(6))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(6))
+    q3_numerator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start %m+% months(6)) & 
+                                                 (ct_end < dt_year_start %m+% months(9))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(9))
+    q4_numerator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start %m+% months(9)) & 
+                                                 (ct_end < dt_year_start %m+% months(12))) %>% NROW()
   if(dt_current_month >= dt_year_start)
     ytd_numerator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start) & 
-                                                  (ct_end < dt_year_start + months(12))) %>% NROW()  
+                                                  (ct_end < dt_year_start %m+% months(12))) %>% NROW()  
   df_tmp <- data.frame(metric = 'Valid Exit WEMWBS',
                        current_month = sprintf('%.1f%% (%d/%d)', (curr_month_numerator / curr_month_denominator) * 100, curr_month_numerator, curr_month_denominator),
                        q1 = sprintf('%.1f%% (%d/%d)', (q1_numerator / q1_denominator) * 100, q1_numerator, q1_denominator),
@@ -832,47 +954,47 @@ fnGetEntryLoneliness <- function(df_ct){
   df_tmp <- df_ct %>% dplyr::filter(!(ct_closure %in% unlist(unname(ini_file_settings$caseload_tracker_exclusions))))
   
   # Trim the data to end at the end of the current month
-  df_tmp <- df_tmp %>% dplyr::filter(ct_start <= dt_current_month + months(1))
+  df_tmp <- df_tmp %>% dplyr::filter(ct_start <= dt_current_month %m+% months(1))
   
   # Calculate denominator for each period
   curr_month_denominator <- df_tmp %>% dplyr::filter((ct_start >= dt_current_month) & 
-                                                       (ct_start < dt_current_month + months(1))) %>% NROW()
+                                                       (ct_start < dt_current_month %m+% months(1))) %>% NROW()
   if(dt_current_month >= dt_year_start)
     q1_denominator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start) & 
-                                                 (ct_start < dt_year_start + months(3))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(3))
-    q2_denominator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start + months(3)) & 
-                                                 (ct_start < dt_year_start + months(6))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(6))
-    q3_denominator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start + months(6)) & 
-                                                 (ct_start < dt_year_start + months(9))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(9))
-    q4_denominator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start + months(9)) & 
-                                                 (ct_start < dt_year_start + months(12))) %>% NROW()
+                                                 (ct_start < dt_year_start %m+% months(3))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(3))
+    q2_denominator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start %m+% months(3)) & 
+                                                 (ct_start < dt_year_start %m+% months(6))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(6))
+    q3_denominator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start %m+% months(6)) & 
+                                                 (ct_start < dt_year_start %m+% months(9))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(9))
+    q4_denominator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start %m+% months(9)) & 
+                                                 (ct_start < dt_year_start %m+% months(12))) %>% NROW()
   if(dt_current_month >= dt_year_start)
     ytd_denominator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start) & 
-                                                  (ct_start < dt_year_start + months(12))) %>% NROW()
+                                                  (ct_start < dt_year_start %m+% months(12))) %>% NROW()
   # Trim to only valid WEMWBS entries
   df_tmp <- df_tmp %>% dplyr::filter(ct_loneliness_in %in% c('Yes','No'))
   
   # Calculate numerator for each period
   curr_month_numerator <- df_tmp %>% dplyr::filter((ct_start >= dt_current_month) & 
-                                                     (ct_start < dt_current_month + months(1))) %>% NROW()
+                                                     (ct_start < dt_current_month %m+% months(1))) %>% NROW()
   if(dt_current_month >= dt_year_start)
     q1_numerator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start) & 
-                                               (ct_start < dt_year_start + months(3))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(3))
-    q2_numerator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start + months(3)) & 
-                                               (ct_start < dt_year_start + months(6))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(6))
-    q3_numerator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start + months(6)) & 
-                                               (ct_start < dt_year_start + months(9))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(9))
-    q4_numerator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start + months(9)) & 
-                                               (ct_start < dt_year_start + months(12))) %>% NROW()
+                                               (ct_start < dt_year_start %m+% months(3))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(3))
+    q2_numerator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start %m+% months(3)) & 
+                                               (ct_start < dt_year_start %m+% months(6))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(6))
+    q3_numerator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start %m+% months(6)) & 
+                                               (ct_start < dt_year_start %m+% months(9))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(9))
+    q4_numerator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start %m+% months(9)) & 
+                                               (ct_start < dt_year_start %m+% months(12))) %>% NROW()
   if(dt_current_month >= dt_year_start)
     ytd_numerator <- df_tmp %>% dplyr::filter((ct_start >= dt_year_start) & 
-                                                (ct_start < dt_year_start + months(12))) %>% NROW()
+                                                (ct_start < dt_year_start %m+% months(12))) %>% NROW()
   
   df_tmp <- data.frame(metric = 'Valid Entry Loneliness',
                        current_month = sprintf('%.1f%% (%d/%d)', (curr_month_numerator / curr_month_denominator) * 100, curr_month_numerator, curr_month_denominator),
@@ -909,47 +1031,47 @@ fnGetExitLoneliness <- function(df_ct){
   df_tmp <- df_ct %>% dplyr::filter(!(ct_closure %in% unlist(unname(ini_file_settings$caseload_tracker_exclusions))))
   
   # Trim the data to end at the end of the current month
-  df_tmp <- df_tmp %>% dplyr::filter(ct_start <= dt_current_month + months(1))
+  df_tmp <- df_tmp %>% dplyr::filter(ct_start <= dt_current_month %m+% months(1))
   
   # Calculate denominator for each period
   curr_month_denominator <- df_tmp %>% dplyr::filter((ct_end >= dt_current_month) & 
-                                                       (ct_end < dt_current_month + months(1))) %>% NROW()
+                                                       (ct_end < dt_current_month %m+% months(1))) %>% NROW()
   if(dt_current_month >= dt_year_start)
     q1_denominator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start) & 
-                                                 (ct_end < dt_year_start + months(3))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(3))
-    q2_denominator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(3)) & 
-                                                 (ct_end < dt_year_start + months(6))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(6))
-    q3_denominator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(6)) & 
-                                                 (ct_end < dt_year_start + months(9))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(9))
-    q4_denominator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(9)) & 
-                                                 (ct_end < dt_year_start + months(12))) %>% NROW()
+                                                 (ct_end < dt_year_start %m+% months(3))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(3))
+    q2_denominator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start %m+% months(3)) & 
+                                                 (ct_end < dt_year_start %m+% months(6))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(6))
+    q3_denominator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start %m+% months(6)) & 
+                                                 (ct_end < dt_year_start %m+% months(9))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(9))
+    q4_denominator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start %m+% months(9)) & 
+                                                 (ct_end < dt_year_start %m+% months(12))) %>% NROW()
   if(dt_current_month >= dt_year_start)
     ytd_denominator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start) & 
-                                                  (ct_end < dt_year_start + months(12))) %>% NROW()
+                                                  (ct_end < dt_year_start %m+% months(12))) %>% NROW()
   # Trim to only valid WEMWBS entries
   df_tmp <- df_tmp %>% dplyr::filter(!is.na(ct_loneliness_out))
   
   # Calculate numerator for each period
   curr_month_numerator <- df_tmp %>% dplyr::filter((ct_end >= dt_current_month) & 
-                                                     (ct_end < dt_current_month + months(1))) %>% NROW()
+                                                     (ct_end < dt_current_month %m+% months(1))) %>% NROW()
   if(dt_current_month >= dt_year_start)
     q1_numerator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start) & 
-                                               (ct_end < dt_year_start + months(3))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(3))
-    q2_numerator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(3)) & 
-                                               (ct_end < dt_year_start + months(6))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(6))
-    q3_numerator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(6)) & 
-                                               (ct_end < dt_year_start + months(9))) %>% NROW()
-  if(dt_current_month >= dt_year_start + months(9))
-    q4_numerator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start + months(9)) & 
-                                               (ct_end < dt_year_start + months(12))) %>% NROW()
+                                               (ct_end < dt_year_start %m+% months(3))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(3))
+    q2_numerator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start %m+% months(3)) & 
+                                               (ct_end < dt_year_start %m+% months(6))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(6))
+    q3_numerator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start %m+% months(6)) & 
+                                               (ct_end < dt_year_start %m+% months(9))) %>% NROW()
+  if(dt_current_month >= dt_year_start %m+% months(9))
+    q4_numerator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start %m+% months(9)) & 
+                                               (ct_end < dt_year_start %m+% months(12))) %>% NROW()
   if(dt_current_month >= dt_year_start)
     ytd_numerator <- df_tmp %>% dplyr::filter((ct_end >= dt_year_start) & 
-                                                (ct_end < dt_year_start + months(12))) %>% NROW()  
+                                                (ct_end < dt_year_start %m+% months(12))) %>% NROW()  
   df_tmp <- data.frame(metric = 'Valid Exit Loneliness',
                        current_month = sprintf('%.1f%% (%d/%d)', (curr_month_numerator / curr_month_denominator) * 100, curr_month_numerator, curr_month_denominator),
                        q1 = sprintf('%.1f%% (%d/%d)', (q1_numerator / q1_denominator) * 100, q1_numerator, q1_denominator),
@@ -1335,6 +1457,10 @@ for(f in reporting_workbook_filelist){
   df_outcomes <- df_outcomes %>% bind_rows(fnImportReportingWorkbook_Outcomes(path = f))
 }
 
+# * 2.3. Activity Workbook ----
+# ─────────────────────────────
+df_activity <- fnImportActivityWorkbook(path = activity_file)
+
 # 3. Process Data ----
 # ════════════════════
 
@@ -1370,19 +1496,22 @@ df_headline_section <- df_headline_section %>% bind_rows(fnGetNewClientsSupporte
 df_headline_section <- df_headline_section %>% bind_rows(fnGetClientsSupported(df_caseload_tracker))
 
 # Previous Activity 3 and 12 Month: ED | EM | AMB 
-# Currently we are awaiting the RDUH BI Team's report to populate the following metrics
-df_tmp <- data.frame(metric = c('Previous 3 Month Activity for Clients Supported in Period: ED Attendances',
-                                'Previous 3 Month Activity for Clients Supported in Period: Emergency Admissions',
-                                'Previous 3 Month Activity for Clients Supported in Period: Ambulance Conveyances',
-                                'Previous 12 Month Activity for Clients Supported in Period: ED Attendances',
-                                'Previous 12 Month Activity for Clients Supported in Period: Emergency Admissions',
-                                'Previous 12 Month Activity for Clients Supported in Period: Ambulance Conveyances'),
-                     current_month = rep(NA, 6),
-                     q1 = rep(NA, 6),
-                     q2 = rep(NA, 6),
-                     q3 = rep(NA, 6),
-                     q4 = rep(NA, 6),
-                     ytd = rep(NA, 6))
+# # Currently we are awaiting the RDUH BI Team's report to populate the following metrics
+# df_tmp <- data.frame(metric = c('Previous 3 Month Activity for Clients Supported in Period: ED Attendances',
+#                                 'Previous 3 Month Activity for Clients Supported in Period: Emergency Admissions',
+#                                 'Previous 3 Month Activity for Clients Supported in Period: Ambulance Conveyances',
+#                                 'Previous 12 Month Activity for Clients Supported in Period: ED Attendances',
+#                                 'Previous 12 Month Activity for Clients Supported in Period: Emergency Admissions',
+#                                 'Previous 12 Month Activity for Clients Supported in Period: Ambulance Conveyances'),
+#                      current_month = rep(NA, 6),
+#                      q1 = rep(NA, 6),
+#                      q2 = rep(NA, 6),
+#                      q3 = rep(NA, 6),
+#                      q4 = rep(NA, 6),
+#                      ytd = rep(NA, 6))
+df_tmp <- df_activity[25:31,] %>%
+  mutate(across(.cols = 2:7, .fns = as.integer))
+
 df_headline_section <- df_headline_section %>% bind_rows(df_tmp)
 
 # * 3.2. Changes in Activity Section ----
@@ -1418,25 +1547,6 @@ df_activity_section <- data.frame(metric = as.character(),
 # New Clients Supported in Period
 df_activity_section <- df_activity_section %>% bind_rows(fnGetNewClientsSupported(df_caseload_tracker))
 
-# RDB ============================================================================ ----
-# Reduction in Activity 3 and 12 Month: ED | EM | AMB 
-# Currently we are awaiting the RDUH BI Team's report to populate the following metrics
-df_tmp <- data.frame(metric = c('Reduction in Activity Starting 3 months from Intervention Start (NHSE Target 40%): ED Attendances',
-                                'Reduction in Activity Starting 3 months from Intervention Start (NHSE Target 40%): Emergency Admissions',
-                                'Reduction in Activity Starting 3 months from Intervention Start (NHSE Target 40%): Ambulance Conveyances',
-                                'Reduction in Activity 12 months Prior vs. 12 months Post Intervention (OND Target 40%): ED Attendances',
-                                'Reduction in Activity 12 months Prior vs. 12 months Post Intervention (OND Target 40%): Emergency Admissions',
-                                'Reduction in Activity 12 months Prior vs. 12 months Post Intervention (OND Target 40%): Ambulance Conveyances'),
-                     current_month = rep(NA, 6),
-                     q1 = rep(NA, 6),
-                     q2 = rep(NA, 6),
-                     q3 = rep(NA, 6),
-                     q4 = rep(NA, 6),
-                     ytd = rep(NA, 6))
-fnGetActivityData()
-
-df_activity_section <- df_activity_section %>% bind_rows(df_tmp)
-
 # Reduction in People Experiencing Loneliness at End of Support (NHSE Target 66%)
 # This makes the assumption that we will improve the experiencing loneliness support on entry and exit
 df_activity_section <- df_activity_section %>% bind_rows(fnGetReductionInLoneliness(df_ct = df_caseload_tracker))
@@ -1450,6 +1560,13 @@ df_activity_section <- df_activity_section %>% bind_rows(fnGetProgressingAtLeast
 
 # Clients Ending Support
 df_activity_section <- df_activity_section %>% bind_rows(fnGetClientsEndingSupport(df_ct = df_caseload_tracker))
+
+# Activity Section
+if(unname(project_id)==2473){
+  df_activity_section_em_ed_amb <- df_activity[25:NROW(df_activity),]
+} else {
+  df_activity_section_em_ed_amb <- NULL
+}
 
 # People Reporting a Positive Experience from our Support (NHSE Target 80%)**
 # This metric is currently not recorded
@@ -1520,13 +1637,165 @@ df_outcomes_12m_section <- fnOutcomes12mSection(df_outcomes)
 df_outcomes_3m_section_metric <- fnOutcomes3mSectionMetric(df_outcomes)
 df_outcomes_12m_section_metric <- fnOutcomes12mSectionMetric(df_outcomes)
 
+# * 3.8. Write data object ----
+# ─────────────────────────────
+
+save(list = c('dt_year_start', 'dt_current_month',
+              'df_headline_section', 'df_activity_section', 'df_activity_section_em_ed_amb',
+              'df_kpi_section', 'df_data_point_section', 'df_support_provided_section', 
+              'df_outputs_3m_section', 'df_outputs_12m_section', 'df_outputs_3m_section_metric', 
+              'df_outputs_12m_section_metric', 'df_outcomes_3m_section', 'df_outcomes_12m_section',
+              'df_outcomes_3m_section_metric', 'df_outcomes_12m_section_metric'), file = 'data_objects.RObj')
+
 # * 3.8. Impact Reporting Section ----
 # ────────────────────────────────────
 
-# Data Points
-# Support and Referrals
-# Outputs
-# Outcomes
+# * * 3.8.1. Impact Reporting: Load lookups and data ----
+df_lookup <- read.csv(file = 'impact_reporting_api_entity_references.csv')
+df_uploaded_data <- df_errors <- data.frame()
+
+if(dlgMessage('Do you want to submit IMPACT data', 'yesno')$res=='yes'){
+  # Generate UUID
+  uuid <- uuid::UUIDgenerate()
+  
+  # * * 3.8.2. Impact Reporting: Data points ----
+  df_report_data <- df_data_points %>% 
+    dplyr::filter(month >= dt_current_month & month < dt_current_month %m+% months(1)) %>%
+    # Group and summarise on metric
+    group_by(month, metric) %>%
+    summarise(value = sum(value, na.rm = TRUE),
+              .groups = 'keep') %>%
+    ungroup() %>%
+    # Filter out any zero values
+    dplyr::filter(value > 0) %>%
+    # Add in the reporting_workbook_sheet and section fields
+    mutate(reporting_workbook_sheet = 'Lookups_Data_Points',
+           section = 'Data Points') %>%
+    # Join to the impact reporting lookup data
+    left_join(df_lookup, by = c('reporting_workbook_sheet', 'section', 'metric'))
+  
+  # Report any unmatched data to the error dataframe
+  df_errors <- df_report_data %>% 
+    dplyr::filter(is.na(id)) %>%
+    select(reporting_workbook_sheet, section, metric, value) %>%
+    mutate(uuid = uuid, .before = 1)
+  
+  # Select only valid data to upload
+  df_report_data <- df_report_data %>% 
+    dplyr::filter(!is.na(id)) %>%
+    select(month, reporting_workbook_sheet, section, metric, value, id, name, classification_name, classification_value) %>%
+    mutate(uuid = uuid, .before = 1)
+  
+  # Apply fnPostData to each row of the data points dataframe
+  df_uploaded_data <- df_report_data %>% mutate(status = apply(df_report_data, 1, fnPostData, uuid))
+
+  # * * 3.8.3. Impact Reporting: Support and referrals ----
+  df_report_data <- df_support_and_referrals %>% 
+    dplyr::filter(month >= dt_current_month & month < dt_current_month %m+% months(1)) %>%
+    mutate(metric = support) %>% 
+    # Group and summarise on metric
+    group_by(month, section, metric) %>%
+    summarise(value = n(),
+              .groups = 'keep') %>%
+    ungroup() %>%
+    # Filter out any zero values
+    dplyr::filter(value > 0) %>%
+    # Add in the reporting_workbook_sheet and section fields
+    mutate(reporting_workbook_sheet = 'Lookups_Support_Section') %>%
+    # Join to the impact reporting lookup data
+    left_join(df_lookup, by = c('reporting_workbook_sheet', 'section', 'metric'))
+  
+  # Report any unmatched data to the error dataframe
+  df_errors <- df_errors %>% bind_rows(
+    df_report_data %>% 
+      dplyr::filter(is.na(id)) %>%
+      select(reporting_workbook_sheet, section, metric, value) %>%
+      mutate(uuid = uuid, .before = 1)
+  )
+  
+  # Select only valid data to upload
+  df_report_data <- df_report_data %>% 
+    dplyr::filter(!is.na(id)) %>%
+    select(month, reporting_workbook_sheet, section, metric, value, id, name, classification_name, classification_value) %>%
+    mutate(uuid = uuid, .before = 1)
+  
+  # Apply fnPostData to each row of the data points dataframe
+  df_uploaded_data <- df_uploaded_data %>% bind_rows(df_report_data %>% mutate(status = apply(df_report_data, 1, fnPostData, uuid)))
+
+  # * * 3.8.4. Impact Reporting: Outputs ----
+  df_report_data <- df_outputs %>% 
+    dplyr::filter(month >= dt_current_month & month < dt_current_month %m+% months(1)) %>%
+    mutate(metric = output) %>%
+    # Group and summarise on metric
+    group_by(month, section, metric) %>%
+    summarise(value = n(),
+              .groups = 'keep') %>%
+    ungroup() %>%
+    # Filter out any zero values
+    dplyr::filter(value > 0) %>%
+    # Add in the reporting_workbook_sheet and section fields
+    mutate(reporting_workbook_sheet = 'Lookups_Outputs') %>%
+    # Join to the impact reporting lookup data
+    left_join(df_lookup, by = c('reporting_workbook_sheet', 'section', 'metric'))
+  
+  # Report any unmatched data to the error dataframe
+  df_errors <- df_errors %>% bind_rows(
+    df_report_data %>% 
+      dplyr::filter(is.na(id)) %>%
+      select(reporting_workbook_sheet, section, metric, value) %>%
+      mutate(uuid = uuid, .before = 1)
+  )
+  
+  # Select only valid data to upload
+  df_report_data <- df_report_data %>% 
+    dplyr::filter(!is.na(id)) %>%
+    select(month, reporting_workbook_sheet, section, metric, value, id, name, classification_name, classification_value) %>%
+    mutate(uuid = uuid, .before = 1)
+  
+  # Apply fnPostData to each row of the data points dataframe
+  df_uploaded_data <- df_uploaded_data %>% bind_rows(df_report_data %>% mutate(status = apply(df_report_data, 1, fnPostData, uuid)))
+
+  # * * 3.8.5. Impact Reporting: Outcomes ----
+  df_report_data <- df_outcomes %>% 
+    dplyr::filter(month >= dt_current_month & month < dt_current_month %m+% months(1)) %>%
+    mutate(metric = outcome) %>%
+    # Group and summarise on metric
+    group_by(month, section, metric) %>%
+    summarise(value = n(),
+              .groups = 'keep') %>%
+    ungroup() %>%
+    # Filter out any zero values
+    dplyr::filter(value > 0) %>%
+    # Add in the reporting_workbook_sheet and section fields
+    mutate(reporting_workbook_sheet = 'Lookups_Outcomes') %>%
+    # Join to the impact reporting lookup data
+    left_join(df_lookup, by = c('reporting_workbook_sheet', 'section', 'metric'))
+  
+  # Report any unmatched data to the error dataframe
+  df_errors <- df_errors %>% bind_rows(
+    df_report_data %>% 
+      dplyr::filter(is.na(id)) %>%
+      select(reporting_workbook_sheet, section, metric, value) %>%
+      mutate(uuid = uuid, .before = 1)
+  )
+  
+  # Select only valid data to upload
+  df_report_data <- df_report_data %>% 
+    dplyr::filter(!is.na(id)) %>%
+    select(month, reporting_workbook_sheet, section, metric, value, id, name, classification_name, classification_value) %>%
+    mutate(uuid = uuid, .before = 1)
+  
+  # Apply fnPostData to each row of the data points dataframe
+  df_uploaded_data <- df_uploaded_data %>% bind_rows(df_report_data %>% mutate(status = apply(df_report_data, 1, fnPostData, uuid)))
+
+  write.csv(df_errors, 'errors.csv')
+  write.csv(df_uploaded_data, 'uploads.csv')
+}
 
 
+# 4. Create Report ----
+# ═════════════════════
 
+rmarkdown::render(input = 'Flow_Report.Rmd',
+                  output_file = dlgSave(title = "Save file as", 
+                                        default = "Flow_Report.docx")$res)
