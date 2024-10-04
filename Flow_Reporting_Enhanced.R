@@ -6,28 +6,28 @@
 
 # Select ini file
 ini_file <- utils::choose.files(caption = 'Please select the INI FILE', multi = FALSE)
+ini_file_settings <- read.ini(ini_file)
 
 # Select the project
 project_list <- c('One North Devon' = 2472, 'High Flow' = 2473,
                   'Secondary Care' = 2474, 'Primary Care' = 2475,
                   'Community Flow' = 2476)
-project_id <- project_list[utils::select.list(title = 'Select Flow Project', choices = names(project_list), multiple = FALSE, graphics = TRUE)]
+project_id <- as.integer(ini_file_settings$project$id)
 
 # Select caseload tracker
-caseload_tracker_file <- utils::choose.files(caption = 'Please select the CASELOAD TRACKER to import', multi = FALSE)
+caseload_tracker_file <- ini_file_settings$caseload_tracker_import$file
 
 # Select activity file (for High Flow only)
 if(project_id == 2473)
-  activity_file <- utils::choose.files(caption = 'Please select the ED ACTIVITY file to import', multi = FALSE)
+  activity_file <- ini_file_settings$activity_workbook_import$file
 
 # Select reporting Workbooks
-reporting_workbook_filelist <- utils::choose.files(caption = 'Please select the REPORTING WORKBOOKS to import', multi = TRUE)
+reporting_workbook_filelist <- unname(unlist(ini_file_settings$reporting_workbook_import))
 
 library(lubridate)
 
 # Get the start of the reporting year
-year_start <- svDialogs::dlgInput(message = 'Enter Reporting Year Start in YYYY-MM-DD format (e.g. 2024-01-01)', default = '2024-01-01')$res
-dt_year_start <- as.Date(year_start, '%Y-%m-%d')
+dt_year_start <- as.Date(ini_file_settings$project$year_start, '%Y-%m-%d')
 
 # Get the current month
 current_month <- format(Sys.Date() %m+% months(-1), '%Y-%m-01')
@@ -285,7 +285,7 @@ fnImportActivityWorkbook <- function(path, sheet = 'All HIU Clients'){
   df <- read_excel(path, 
                    sheet, 
                    skip = 2,
-                   col_types = c('text', rep('numeric', 3), rep('date', 2), rep('numeric', 24)),
+                   col_types = c('text', rep('numeric', 3), rep('date', 2), rep('numeric', 12), 'skip', rep('numeric', 12)),
                    col_names = FALSE) %>%
     # Rename the column names as previously these have overwritten by caseworkers
     rename_with(.fn = ~c('client_id', 
@@ -1431,11 +1431,9 @@ fnOutcomes12mSectionMetric <- function(df_oc){
 
 # 2. Import data ----
 # ═══════════════════
-ini_file_settings <- read.ini(ini_file)
-
 # Select the caseload tracker sheet from the excel workbook
-caseload_tracker_sheets <- readxl::excel_sheets(path = caseload_tracker_file)
-caseload_tracker_sheets <- utils::select.list(title = 'CASELOAD TRACKER sheet(s)', choices = caseload_tracker_sheets, multiple = TRUE, graphics = TRUE)
+#caseload_tracker_sheets <- readxl::excel_sheets(path = caseload_tracker_file)
+caseload_tracker_sheets <- unname(unlist(ini_file_settings$caseload_tracker_sheets))
 
 # * 2.1. Caseload tracker ----
 # ────────────────────────────
@@ -1802,5 +1800,6 @@ if(dlgMessage('Do you want to submit IMPACT data', 'yesno')$res=='yes'){
 # ═════════════════════
 
 rmarkdown::render(input = 'Flow_Report.Rmd',
+                  params = list(project_id = project_id),
                   output_file = dlgSave(title = "Save file as", 
                                         default = "Flow_Report.docx")$res)
