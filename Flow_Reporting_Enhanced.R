@@ -1,6 +1,8 @@
 # 0. Workaround for choose.file dialog issue ----
 # ═══════════════════════════════════════════════
 
+library(ini)
+
 # Select files to import ----
 # This has to be the first statement in the script as there is a bug with utils::choose.files
 
@@ -41,7 +43,6 @@ dt_current_month <- as.Date(current_month, '%Y-%m-%d')
 # ──────────────────────────
 library(tidyverse)
 library(readxl)
-library(ini)
 library(flextable)
 library(officer)
 library(officedown)
@@ -1462,7 +1463,8 @@ for(f in reporting_workbook_filelist){
 
 # * 2.3. Activity Workbook ----
 # ─────────────────────────────
-df_activity <- fnImportActivityWorkbook(path = activity_file)
+if(project_id==2473)
+  df_activity <- fnImportActivityWorkbook(path = activity_file)
 
 # 3. Process Data ----
 # ════════════════════
@@ -1565,7 +1567,7 @@ df_activity_section <- df_activity_section %>% bind_rows(fnGetProgressingAtLeast
 df_activity_section <- df_activity_section %>% bind_rows(fnGetClientsEndingSupport(df_ct = df_caseload_tracker))
 
 # Activity Section
-if(unname(project_id)==2473){
+if(project_id==2473){
   df_activity_section_em_ed_amb <- df_activity[25:NROW(df_activity),]
 } else {
   df_activity_section_em_ed_amb <- NULL
